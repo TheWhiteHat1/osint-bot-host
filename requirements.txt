@@ -4,3 +4,4 @@ urllib3==1.26.18
 certifi
 chardet
 idna
+imghdr-py==0.3.0
