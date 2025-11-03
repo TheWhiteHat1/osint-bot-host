@@ -13,11 +13,9 @@ from telegram.ext import (
 
 # ================== CONFIG ==================
 API_URL = "https://seller-ki-mkc.taitanx.workers.dev/?mobile="
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8449625451:AAGxa7JcyEkjiND7EaWJRHLHsY2-ZFRTvZU")
-ADMIN_IDS = [7985958385, 6000971026]
-
-
-ADMIN_USERNAME = "@Bossssss191"
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8257919061:AAFcvvTeInEqTGVNoM3sUzpZerewAgpo9NY")
+ADMIN_ID = 7985958385
+ADMIN_USERNAME = "@DARKGP0"
 
 # ================== TEMP STORAGE ==================
 user_credits = {}
@@ -50,19 +48,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "⚠️ Use this service lawfully."
     )
 
-    await update.message.reply_text(
-        welcome_text,
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(make_inline_buttons(user_id)),
-    )
-
-# ================== INLINE BUTTONS MAKER ==================
-def make_inline_buttons(user_id):
-    return [
-        [InlineKeyboardButton("📂 Profile", callback_data=f"profile_{user_id}")],
-        [InlineKeyboardButton("🔗 Referral", callback_data=f"referral_{user_id}")],
+    keyboard = [
+        [InlineKeyboardButton("📱 Number Lookup", callback_data="number_info")],
+        [InlineKeyboardButton("📂 Profile", callback_data="profile")],
+        [InlineKeyboardButton("🔗 Referral", callback_data="referral")],
         [InlineKeyboardButton("💰 Buy Credits", url=f"https://t.me/{ADMIN_USERNAME.replace('@','')}")],
     ]
+    await update.message.reply_text(
+        welcome_text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 # ================== HELP ==================
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -70,12 +64,15 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📖 *Commands:*\n"
         "/start - Start bot\n"
         "/help - Show help\n"
-        "/number <number> - Lookup number\n"
+        "/search <number> - Lookup number\n"
         "/credits - Show balance\n\n"
         "👨‍💻 *Admin Only:*\n"
         "/addcredits <id> <amt>\n"
+        "/deductcredits <id> <amt>\n"
+        "/usercredits <id>\n"
         "/ban <id>\n"
-        "/unban <id>",
+        "/unban <id>\n"
+        "/broadcast <msg>",
         parse_mode="Markdown",
     )
 
@@ -89,52 +86,42 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("🚫 You are banned.")
         return
 
-    data = query.data.split("_")[0]
+    if query.data == "number_info":
+        await query.edit_message_text("📱 Send the *phone number* you want to search.", parse_mode="Markdown")
 
-    if data == "profile":
+    elif query.data == "profile":
         balance = user_credits.get(user_id, 0)
-        await query.edit_message_text(
-            f"👤 *Profile*\n🆔 ID: `{user_id}`\n🔋 Credits: {balance}",
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(make_inline_buttons(user_id)),
-        )
+        await query.edit_message_text(f"👤 *Profile*\n🆔 ID: `{user_id}`\n🔋 Credits: {balance}", parse_mode="Markdown")
 
-    elif data == "referral":
-        await query.edit_message_text(
-            f"🔗 Invite friends!\n👉 https://t.me/{context.bot.username}?start={user_id}",
-            reply_markup=InlineKeyboardMarkup(make_inline_buttons(user_id)),
-        )
+    elif query.data == "referral":
+        await query.edit_message_text(f"🔗 Invite friends!\n👉 https://t.me/{context.bot.username}?start={user_id}")
 
 # ================== SEARCH ==================
 async def search_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-
-    # Command can be `/number` or `/search`
-    text = update.message.text.strip()
-    parts = text.split()
-
-    # Extract number
-    number = None
-    if len(parts) >= 2:
-        number = parts[1]
-    elif len(parts) == 1 and parts[0].isdigit():
-        number = parts[0]
-
-    if not number:
-        await update.message.reply_text("⚠️ Usage: /number <10-digit-phone>")
-        return
-
-    if user_id not in user_credits:
-        user_credits[user_id] = 2
-
     if user_id in banned_users:
         await update.message.reply_text("🚫 You are banned.")
         return
 
+    text = update.message.text.strip()
+    if text.startswith("/search"):
+        parts = text.split()
+        if len(parts) < 2:
+            await update.message.reply_text("⚠️ Usage: /search <number>")
+            return
+        number = parts[1]
+    else:
+        number = text
+
+    if user_id not in user_credits:
+        user_credits[user_id] = 2
+
     if user_credits[user_id] <= 0:
         await update.message.reply_text(
             "❌ No credits left.",
-            reply_markup=InlineKeyboardMarkup(make_inline_buttons(user_id)),
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("💰 Buy Credits", url=f"https://t.me/{ADMIN_USERNAME.replace('@','')}")]]
+            ),
         )
         return
 
@@ -176,18 +163,14 @@ async def search_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
             final_msg += f"\n\n🔋 *Remaining credits:* {user_credits[user_id]}"
             final_msg += f"\n\n🧑‍💻 Credit: {credit}\n👨‍💻 Developer: {developer}"
 
-            await update.message.reply_text(
-                final_msg,
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup(make_inline_buttons(user_id)),
-            )
+            await update.message.reply_text(final_msg, parse_mode="Markdown")
         else:
             await update.message.reply_text("⚠️ No data found.")
     except Exception as e:
         logger.error(f"Error: {e}")
         await update.message.reply_text(f"⚠️ Error: {e}")
 
-# ================== ADMIN ==================
+# ================== ADMIN (shortened for brevity) ==================
 async def add_credits(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ Not authorized.")
@@ -196,9 +179,7 @@ async def add_credits(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_id = int(context.args[0])
         amount = int(context.args[1])
         user_credits[target_id] = user_credits.get(target_id, 0) + amount
-        await update.message.reply_text(
-            f"✅ Added {amount} credits to {target_id}. Balance: {user_credits[target_id]}"
-        )
+        await update.message.reply_text(f"✅ Added {amount} credits to {target_id}. Balance: {user_credits[target_id]}")
     except:
         await update.message.reply_text("⚠️ Usage: /addcredits <user_id> <amount>")
 
@@ -208,12 +189,12 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
-    app.add_handler(CommandHandler(["search", "number"], search_number))
+    app.add_handler(CommandHandler("search", search_number))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_number))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(CommandHandler("addcredits", add_credits))
 
-    print("✅ Bot is running (Group Compatible)...")
+    print("✅ Bot is running...")
     app.run_polling()
 
 if __name__ == "__main__":
