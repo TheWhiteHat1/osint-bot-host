@@ -13,9 +13,9 @@ from telegram.ext import (
 
 # ================== CONFIG ==================
 API_URL = "https://seller-ki-mkc.taitanx.workers.dev/?mobile="
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8257919061:AAFcvvTeInEqTGVNoM3sUzpZerewAgpo9NY")
-ADMIN_ID = 7985958385
-ADMIN_USERNAME = "@DARKGP0"
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8449625451:AAGxa7JcyEkjiND7EaWJRHLHsY2-ZFRTvZU")
+ADMIN_ID =  6000971026
+ADMIN_USERNAME = "@Bossssss191"
 
 # ================== TEMP STORAGE ==================
 user_credits = {}
@@ -156,7 +156,7 @@ async def search_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 results.append(msg)
 
             user_credits[user_id] -= 1
-            credit = "@govind"
+            credit = "@Bossssss191"
             developer = "@darkgp0"
 
             final_msg = "\n\n".join(results)
