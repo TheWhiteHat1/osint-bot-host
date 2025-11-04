@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # main.py - Render-ready Telegram OSINT bot (Fixed for Webhook/Render)
-# Requirements: python-telegram-bot==13.15, requests, APScheduler, pytz, tzlocal, tornado, etc.
 
 import json
 import os
@@ -14,11 +13,10 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
 from telegram.error import BadRequest, TelegramError
 
-# Disable insecure request warnings for third-party APIs (we use verify=False in some requests)
+# Disable insecure request warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ================== CONFIGURATION ==================
-# Note: For production, you should store these in environment variables and not in source code.
 BOT_TOKEN = os.getenv("BOT_TOKEN") 
 OWNER_BOT_TOKEN = os.getenv("OWNER_BOT_TOKEN") or os.getenv("BOT_TOKEN")
 OWNER_CHAT_ID = int(os.getenv("OWNER_CHAT_ID")) if os.getenv("OWNER_CHAT_ID") else 0
@@ -27,9 +25,9 @@ ADMIN_ID = int(os.getenv("ADMIN_ID")) if os.getenv("ADMIN_ID") else 0
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME") or "@DARKGP0"
 LOGO_URL = os.getenv("LOGO_URL") or "https://ibb.co/yc20Z7x1"
 
-# Channels to require users to join before showing full welcome (replace with real channel usernames)
-CHANNEL_1 = os.getenv("CHANNEL_1") or "@channel1_username"
-CHANNEL_2 = os.getenv("CHANNEL_2") or "@channel2_username"
+# Channels to require users to join
+CHANNEL_1 = os.getenv("CHANNEL_1") or "darkgp_in"
+CHANNEL_2 = os.getenv("CHANNEL_2") or "darkgp_in2"
 
 # APIs
 API_URL = os.getenv("API_URL") or "https://seller-ki-mkc.taitanx.workers.dev/?mobile="
@@ -38,7 +36,6 @@ API_URL_PAK_SIM = os.getenv("API_URL_PAK_SIM") or "https://allnetworkdata.com/?n
 API_URL_GST = os.getenv("API_URL_GST") or "https://gst-bolt.vercel.app/?gst="
 API_URL_PAN = os.getenv("API_URL_PAN") or "https://pan-vercel.vercel.app/?pan="
 
-# Render webhook domain (your Render app URL) - MUST BE SET IN ENVIRONMENT VARIABLES
 WEBHOOK_DOMAIN = os.getenv("WEBHOOK_DOMAIN")
 
 # === FILE STORAGE ===
@@ -62,7 +59,6 @@ logger = logging.getLogger(__name__)
 def load_data():
     global user_credits, referral_data, banned_users
     
-    # Load user credits
     if os.path.exists(USER_DATA_FILE):
         try:
             with open(USER_DATA_FILE, "r") as f:
@@ -74,7 +70,6 @@ def load_data():
     else:
         user_credits = {}
 
-    # Load referrals
     if os.path.exists(REFERRAL_DATA_FILE):
         try:
             with open(REFERRAL_DATA_FILE, "r") as f:
@@ -86,7 +81,6 @@ def load_data():
     else:
         referral_data = {}
 
-    # Load banned users
     if os.path.exists(BANNED_USERS_FILE):
         try:
             with open(BANNED_USERS_FILE, "r") as f:
@@ -177,8 +171,115 @@ def _safe_edit_or_reply(query, text, parse_mode="Markdown", reply_markup=None):
         except Exception as e2:
             logger.error(f"Fallback reply failed: {e2}")
 
-# ================== HANDLERS ==================
-# ================== HANDLERS ==================
+# ================== COMMAND HANDLERS ==================
+def help_command(update: Update, context: CallbackContext):
+    help_text = """
+🤖 *DARK GP OSINT Bot Help*
+
+*Available Commands:*
+/start - Start the bot
+/help - Show this help message
+/profile - Check your profile and credits
+/referral - Get your referral link
+/credits - Check your credit balance
+
+*Lookup Services:*
+• 📱 Number Lookup
+• 🚘 Vehicle RC Lookup  
+• 🇵🇰 Pakistan SIM Info
+• 🏢 GST Lookup
+• 📄 PAN Lookup
+
+*How to Use:*
+1. Use /start to begin
+2. Select a lookup service
+3. Send the required information
+4. Get instant results!
+
+*Credits System:*
+- Start with 2 free credits
+- Earn 1 credit per referral
+- Buy more credits from admin
+
+*Support:* {}
+    """.format(ADMIN_USERNAME)
+    
+    update.message.reply_text(help_text, parse_mode="Markdown")
+
+def profile_command(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    balance = user_credits.get(user_id, 0)
+    username = update.effective_user.username or "Not set"
+    first_name = update.effective_user.first_name or "Not set"
+    
+    profile_text = f"""
+👤 *User Profile*
+
+📛 *Name:* {first_name}
+🔖 *Username:* @{username}
+🆔 *User ID:* `{user_id}`
+💰 *Credits:* {balance}
+
+*Referral Stats:*
+• Total Referrals: {sum(1 for ref in referral_data.values() if ref == user_id)}
+• Referral Link: `https://t.me/{context.bot.username}?start={user_id}`
+    """
+    
+    update.message.reply_text(profile_text, parse_mode="Markdown")
+
+def referral_command(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    ref_link = f"https://t.me/{context.bot.username}?start={user_id}"
+    referral_count = sum(1 for ref in referral_data.values() if ref == user_id)
+    
+    ref_text = f"""
+🔗 *Referral Program*
+
+Invite friends and earn *+1 credit* for each successful referral!
+
+*Your Referral Link:*
+`{ref_link}`
+
+*Your Referral Stats:*
+• Total Referrals: {referral_count}
+• Credits Earned: {referral_count}
+
+*How it works:*
+1. Share your referral link
+2. When someone joins using your link
+3. You automatically get +1 credit
+4. They get started with 2 credits
+
+Start inviting and earn free credits! 🎁
+    """
+    
+    update.message.reply_text(ref_text, parse_mode="Markdown")
+
+def credits_command(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    balance = user_credits.get(user_id, 0)
+    
+    credits_text = f"""
+💰 *Credit Balance*
+
+*Current Credits:* {balance}
+
+*Ways to Get Credits:*
+• 🎁 Start bonus: 2 credits
+• 🔗 Referral: +1 credit per referral  
+• 💰 Purchase from admin
+
+*Credit Usage:*
+• Each lookup costs 1 credit
+• Check balance before searching
+
+*Need more credits?*
+Contact {ADMIN_USERNAME}
+    """
+    
+    update.message.reply_text(credits_text, parse_mode="Markdown")
+
+# ================== MAIN HANDLERS ==================
 def start(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     args = context.args
@@ -207,11 +308,11 @@ def start(update: Update, context: CallbackContext):
     context.user_data.clear()
 
     # Check if user is already a member (skip join prompt)
-    if is_user_member_of(CHANNEL_1, user_id, context.bot) and is_user_member_of(CHANNEL_2, user_id, context.bot):
+    if is_user_member_of("@" + CHANNEL_1, user_id, context.bot) and is_user_member_of("@" + CHANNEL_2, user_id, context.bot):
         _send_welcome(update, context, use_reply=True)
         return
 
-    # FIXED: Remove @ from channel usernames for URL
+    # FIXED: Clean channel names for URLs
     channel1_clean = CHANNEL_1.replace('@', '')
     channel2_clean = CHANNEL_2.replace('@', '')
 
@@ -227,8 +328,8 @@ def start(update: Update, context: CallbackContext):
 
 To use this bot, you need to join both of our channels:
 
-• *Channel 1:* {CHANNEL_1}
-• *Channel 2:* {CHANNEL_2}
+• *Channel 1:* @{CHANNEL_1.replace('@', '')}
+• *Channel 2:* @{CHANNEL_2.replace('@', '')}
 
 After joining, tap *Verify Joined Channels* below.
 """
@@ -237,69 +338,42 @@ After joining, tap *Verify Joined Channels* below.
     except Exception:
         update.message.reply_text(caption, parse_mode="Markdown", reply_markup=join_markup)
 
-def _handle_verify_channels(query, context):
-    user_id = query.from_user.id
-    bot = context.bot
+def _send_welcome(update: Update, context: CallbackContext, use_reply=False):
+    user_id = update.effective_user.id
+    balance = user_credits.get(user_id, 0)
 
-    # FIXED: Check bot admin status SILENTLY - don't show error to user
-    bot_admin_1 = is_bot_admin_in(CHANNEL_1, bot)
-    bot_admin_2 = is_bot_admin_in(CHANNEL_2, bot)
+    welcome_text = (
+        f"👋 Welcome to DARK GP System\n"
+        f"🕒 Current Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        "🔍 OSINT Info Bot — Get Number / Vehicle / SIM Info 📱\n\n"
+        f"💰 Credits: {balance}\n"
+        f"☎️ Support: {ADMIN_USERNAME}\n\n"
+        "⚠️ Use this service lawfully."
+    )
 
-    # If bot is not admin in channels, use manual verification
-    if not bot_admin_1 or not bot_admin_2:
-        # SILENT verification - just check membership without admin rights
-        member1 = is_user_member_of(CHANNEL_1, user_id, bot)
-        member2 = is_user_member_of(CHANNEL_2, user_id, bot)
+    keyboard = [
+        [InlineKeyboardButton("📱 Number Lookup", callback_data="number_info")],
+        [InlineKeyboardButton("🚘 Vehicle Lookup", callback_data="vehicle_info")],
+        [InlineKeyboardButton("🇵🇰 Pakistan SIM Info", callback_data="pak_sim_info")],
+        [InlineKeyboardButton("🏢 GST Lookup", callback_data="gst_info")],
+        [InlineKeyboardButton("📄 PAN Lookup", callback_data="pan_info")],
+        [InlineKeyboardButton("📂 Profile", callback_data="profile")],
+        [InlineKeyboardButton("🔗 Referral", callback_data="referral")],
+        [InlineKeyboardButton("💰 Buy Credits", url=f"https://t.me/{ADMIN_USERNAME.replace('@','')}")],
+        [InlineKeyboardButton("ℹ️ Help", callback_data="help")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-        if member1 and member2:
-            try:
-                query.edit_message_caption("✅ Verification successful! Sending main menu...", parse_mode="Markdown")
-            except BadRequest:
-                query.message.reply_text("✅ Verification successful! Sending main menu...")
-            
-            # Send welcome menu
-            _send_welcome(update=query, context=context, use_reply=False)
+    try:
+        if use_reply and update.message:
+            update.message.reply_photo(photo=LOGO_URL, caption=welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
         else:
-            missing = []
-            if not member1:
-                missing.append(CHANNEL_1)
-            if not member2:
-                missing.append(CHANNEL_2)
-            
-            # FIXED: Simple message without admin details
-            msg = "❌ *Verification Failed*\n\nYou need to join both channels:\n"
-            for ch in missing:
-                msg += f"• {ch}\n"
-            msg += "\nPlease join them and tap *Verify Joined Channels* again."
-            
-            _safe_edit_or_reply(query, msg)
-        return
-
-    # If bot is admin, use proper verification
-    member1 = is_user_member_of(CHANNEL_1, user_id, bot)
-    member2 = is_user_member_of(CHANNEL_2, user_id, bot)
-
-    if member1 and member2:
-        try:
-            query.edit_message_caption("✅ You are verified and joined both channels. Sending main menu...", parse_mode="Markdown")
-        except BadRequest:
-            query.message.reply_text("✅ Verification successful. Sending main menu...")
-        
-        _send_welcome(update=query, context=context, use_reply=False)
-    else:
-        missing = []
-        if not member1:
-            missing.append(CHANNEL_1)
-        if not member2:
-            missing.append(CHANNEL_2)
-        
-        # FIXED: Simple error message
-        msg = "❌ *Verification Failed*\n\nYou need to join both channels:\n"
-        for ch in missing:
-            msg += f"• {ch}\n"
-        msg += "\nPlease join them and tap *Verify Joined Channels* again."
-        
-        _safe_edit_or_reply(query, msg)
+            context.bot.send_photo(chat_id=user_id, photo=LOGO_URL, caption=welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
+    except Exception:
+        if use_reply and update.message:
+            update.message.reply_text(welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
+        else:
+            context.bot.send_message(chat_id=user_id, text=welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
 
 def handle_callback(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -316,7 +390,7 @@ def handle_callback(update: Update, context: CallbackContext):
         return
         
     # For other actions, check membership
-    if not (is_user_member_of(CHANNEL_1, user_id, context.bot) and is_user_member_of(CHANNEL_2, user_id, context.bot)):
+    if not (is_user_member_of("@" + CHANNEL_1, user_id, context.bot) and is_user_member_of("@" + CHANNEL_2, user_id, context.bot)):
         _safe_edit_or_reply(query, "⚠️ Please use /start and *Verify Joined Channels* first to use the bot functions.")
         return
 
@@ -375,20 +449,43 @@ def _handle_verify_channels(query, context):
     user_id = query.from_user.id
     bot = context.bot
 
-    bot_admin_1 = is_bot_admin_in(CHANNEL_1, bot)
-    bot_admin_2 = is_bot_admin_in(CHANNEL_2, bot)
+    # FIXED: Check bot admin status SILENTLY
+    bot_admin_1 = is_bot_admin_in("@" + CHANNEL_1, bot)
+    bot_admin_2 = is_bot_admin_in("@" + CHANNEL_2, bot)
 
+    # If bot is not admin in channels, use manual verification
     if not bot_admin_1 or not bot_admin_2:
-        msg = "⚠️ I need to be an *administrator* in both channels to verify users automatically.\n\n"
-        if not bot_admin_1:
-            msg += f"• Promote me to admin in {CHANNEL_1}\n"
-        if not bot_admin_2:
-            msg += f"• Promote me to admin in {CHANNEL_2}\n"
-        _safe_edit_or_reply(query, msg)
+        # SILENT verification - just check membership without admin rights
+        member1 = is_user_member_of("@" + CHANNEL_1, user_id, bot)
+        member2 = is_user_member_of("@" + CHANNEL_2, user_id, bot)
+
+        if member1 and member2:
+            try:
+                query.edit_message_caption("✅ Verification successful! Sending main menu...", parse_mode="Markdown")
+            except BadRequest:
+                query.message.reply_text("✅ Verification successful! Sending main menu...")
+            
+            # Send welcome menu
+            _send_welcome(update=query, context=context, use_reply=False)
+        else:
+            missing = []
+            if not member1:
+                missing.append("@" + CHANNEL_1)
+            if not member2:
+                missing.append("@" + CHANNEL_2)
+            
+            # FIXED: Simple message without admin details
+            msg = "❌ *Verification Failed*\n\nYou need to join both channels:\n"
+            for ch in missing:
+                msg += f"• {ch}\n"
+            msg += "\nPlease join them and tap *Verify Joined Channels* again."
+            
+            _safe_edit_or_reply(query, msg)
         return
 
-    member1 = is_user_member_of(CHANNEL_1, user_id, bot)
-    member2 = is_user_member_of(CHANNEL_2, user_id, bot)
+    # If bot is admin, use proper verification
+    member1 = is_user_member_of("@" + CHANNEL_1, user_id, bot)
+    member2 = is_user_member_of("@" + CHANNEL_2, user_id, bot)
 
     if member1 and member2:
         try:
@@ -400,13 +497,16 @@ def _handle_verify_channels(query, context):
     else:
         missing = []
         if not member1:
-            missing.append(CHANNEL_1)
+            missing.append("@" + CHANNEL_1)
         if not member2:
-            missing.append(CHANNEL_2)
-        msg = "⚠️ You're missing membership in the following channel(s):\n"
+            missing.append("@" + CHANNEL_2)
+        
+        # FIXED: Simple error message
+        msg = "❌ *Verification Failed*\n\nYou need to join both channels:\n"
         for ch in missing:
             msg += f"• {ch}\n"
         msg += "\nPlease join them and tap *Verify Joined Channels* again."
+        
         _safe_edit_or_reply(query, msg)
 
 def handle_text_message(update: Update, context: CallbackContext):
@@ -418,7 +518,7 @@ def handle_text_message(update: Update, context: CallbackContext):
         update.message.reply_text("⛔ You are banned from using this bot.")
         return
 
-    if not (is_user_member_of(CHANNEL_1, user_id, context.bot) and is_user_member_of(CHANNEL_2, user_id, context.bot)):
+    if not (is_user_member_of("@" + CHANNEL_1, user_id, context.bot) and is_user_member_of("@" + CHANNEL_2, user_id, context.bot)):
         update.message.reply_text("⚠️ Please use the /start command and *Verify Joined Channels* first to use the bot.")
         return
         
@@ -688,83 +788,6 @@ def format_pan_response(info):
     response_text += f"*Status:* {info.get('status', 'Not Available')}\n"
     return response_text
 
-# ================== CONSOLE PRINT FUNCTIONS ==================
-def print_number_results(data):
-    for idx, info in enumerate(data, 1):
-        name = info.get('name') or "N/A"
-        father = info.get('fname') or info.get('father_name') or "N/A"
-        address = info.get('address') or "N/A"
-        mobile = info.get('mobile') or "N/A"
-        alt = info.get('alt') or info.get('alt_mobile') or "N/A"
-        circle = info.get('circle') or "N/A"
-        id_number = info.get('id_number') or "N/A"
-        email = info.get('email') or "N/A"
-
-        if father == "N/A" and address != "N/A":
-            match = re.search(r"(S/O|W/O)\s+([A-Za-z ]+)", address, re.IGNORECASE)
-            if match:
-                father = match.group(2).strip()
-
-        print(f"\n\033[92m✅ Result {idx}\033[0m\n")
-        print(f"\033[93m👤 Name:\033[0m {name}")
-        print(f"\033[96m👨‍👦 Father:\033[0m {father}")
-        print(f"\033[94m📍 Address:\033[0m {address}")
-        print(f"\033[92m📱 Mobile:\033[0m {mobile}")
-        print(f"\033[91m☎️ Alternate:\033[0m {alt}")
-        print(f"\033[95m🌍 Circle:\033[0m {circle}")
-        print(f"\033[93m🆔 ID Number:\033[0m {id_number}")
-        print(f"\033[96m✉️ Email:\033[0m {email}")
-        print("\n\033[95m" + "="*40 + "\033[0m\n")
-
-def print_vehicle_results(info):
-    print("\n\033[92mVehicle Details 🚘\033[0m\n")
-    print(f"RC Number: {info.get('rc_number','Not Available')}")
-    print(f"Owner Name: {info.get('owner_name','Not Available')}")
-    print(f"Father's Name: {info.get('father_name','Not Available')}")
-    print(f"Owner Serial No.: {info.get('owner_serial_no','Not Available')}")
-    print(f"Model Name: {info.get('model_name','Not Available')}")
-    print(f"Maker/Model: {info.get('maker_model','Not Available')}")
-    print(f"Vehicle Class: {info.get('vehicle_class','Not Available')}")
-    print(f"Fuel Type: {info.get('fuel_type','Not Available')}")
-    print(f"Fuel Norms: {info.get('fuel_norms','Not Available')}")
-    print(f"Registration Date: {info.get('registration_date','Not Available')}")
-    print("\n\033[96mInsurance Details 🛡️\033[0m\n")
-    print(f"Company: {info.get('insurance_company','Not Available')}")
-    print(f"Policy Number: {info.get('insurance_no','Not Available')}")
-    print(f"Expiry Date: {info.get('insurance_expiry','Not Available')}")
-    print(f"Valid Upto: {info.get('insurance_upto','Not Available')}")
-    print("\n\033[95mFitness / Tax / PUC ✅\033[0m\n")
-    print(f"Fitness Upto: {info.get('fitness_upto','Not Available')}")
-    print(f"Tax Upto: {info.get('tax_upto','Not Available')}")
-    print(f"PUC Number: {info.get('puc_no','Not Available')}")
-    print(f"PUC Valid Upto: {info.get('puc_upto','Not Available')}")
-    print("\n\033[93mFinancier & RTO 🏛️\033[0m\n")
-    print(f"Financier Name: {info.get('financier_name','Not Available')}")
-    print(f"RTO: {info.get('rto','Not Available')}")
-    print("\n\033[94mAddress 📍\033[0m\n")
-    print(f"Full Address: {info.get('address','Not Available')}")
-    print(f"City: {info.get('city','Not Available')}")
-    print("\n\033[91mContact ☎️\033[0m\n")
-    print(f"Phone: {info.get('phone','Not Available')}")
-    print("\n\033[95m" + "="*50 + "\033[0m\n")
-
-def print_pak_sim_results(info):
-    print("\n\033[92mPakistan SIM Info 📱\033[0m\n")
-    print(f"Name: {info.get('name','Not Available')}")
-    print(f"CNIC: {info.get('cnic','Not Available')}")
-    print(f"Address: {info.get('address','Not Available')}")
-    if "number" in info:
-        print(f"Number: {info.get('number','Not Available')}")
-    else:
-        print("Number: Not Available")
-    if "numbers" in info and isinstance(info["numbers"], list):
-        print("All Numbers: " + ", ".join(info["numbers"]))
-    else:
-        print("All Numbers: Not Available")
-    print(f"City: {info.get('city','Not Available')}")
-    print(f"Province: {info.get('province','Not Available')}")
-    print("\n\033[95m" + "="*50 + "\033[0m\n")
-
 # ================== ADMIN COMMANDS ==================
 def add_credits(update: Update, context: CallbackContext):
     if update.effective_user.id != ADMIN_ID:
@@ -896,19 +919,94 @@ def stats(update: Update, context: CallbackContext):
     
     update.message.reply_text(stats_text, parse_mode="Markdown")
 
+# ================== CONSOLE PRINT FUNCTIONS ==================
+def print_number_results(data):
+    for idx, info in enumerate(data, 1):
+        name = info.get('name') or "N/A"
+        father = info.get('fname') or info.get('father_name') or "N/A"
+        address = info.get('address') or "N/A"
+        mobile = info.get('mobile') or "N/A"
+        alt = info.get('alt') or info.get('alt_mobile') or "N/A"
+        circle = info.get('circle') or "N/A"
+        id_number = info.get('id_number') or "N/A"
+        email = info.get('email') or "N/A"
+
+        if father == "N/A" and address != "N/A":
+            match = re.search(r"(S/O|W/O)\s+([A-Za-z ]+)", address, re.IGNORECASE)
+            if match:
+                father = match.group(2).strip()
+
+        print(f"\n\033[92m✅ Result {idx}\033[0m\n")
+        print(f"\033[93m👤 Name:\033[0m {name}")
+        print(f"\033[96m👨‍👦 Father:\033[0m {father}")
+        print(f"\033[94m📍 Address:\033[0m {address}")
+        print(f"\033[92m📱 Mobile:\033[0m {mobile}")
+        print(f"\033[91m☎️ Alternate:\033[0m {alt}")
+        print(f"\033[95m🌍 Circle:\033[0m {circle}")
+        print(f"\033[93m🆔 ID Number:\033[0m {id_number}")
+        print(f"\033[96m✉️ Email:\033[0m {email}")
+        print("\n\033[95m" + "="*40 + "\033[0m\n")
+
+def print_vehicle_results(info):
+    print("\n\033[92mVehicle Details 🚘\033[0m\n")
+    print(f"RC Number: {info.get('rc_number','Not Available')}")
+    print(f"Owner Name: {info.get('owner_name','Not Available')}")
+    print(f"Father's Name: {info.get('father_name','Not Available')}")
+    print(f"Owner Serial No.: {info.get('owner_serial_no','Not Available')}")
+    print(f"Model Name: {info.get('model_name','Not Available')}")
+    print(f"Maker/Model: {info.get('maker_model','Not Available')}")
+    print(f"Vehicle Class: {info.get('vehicle_class','Not Available')}")
+    print(f"Fuel Type: {info.get('fuel_type','Not Available')}")
+    print(f"Fuel Norms: {info.get('fuel_norms','Not Available')}")
+    print(f"Registration Date: {info.get('registration_date','Not Available')}")
+    print("\n\033[96mInsurance Details 🛡️\033[0m\n")
+    print(f"Company: {info.get('insurance_company','Not Available')}")
+    print(f"Policy Number: {info.get('insurance_no','Not Available')}")
+    print(f"Expiry Date: {info.get('insurance_expiry','Not Available')}")
+    print(f"Valid Upto: {info.get('insurance_upto','Not Available')}")
+    print("\n\033[95mFitness / Tax / PUC ✅\033[0m\n")
+    print(f"Fitness Upto: {info.get('fitness_upto','Not Available')}")
+    print(f"Tax Upto: {info.get('tax_upto','Not Available')}")
+    print(f"PUC Number: {info.get('puc_no','Not Available')}")
+    print(f"PUC Valid Upto: {info.get('puc_upto','Not Available')}")
+    print("\n\033[93mFinancier & RTO 🏛️\033[0m\n")
+    print(f"Financier Name: {info.get('financier_name','Not Available')}")
+    print(f"RTO: {info.get('rto','Not Available')}")
+    print("\n\033[94mAddress 📍\033[0m\n")
+    print(f"Full Address: {info.get('address','Not Available')}")
+    print(f"City: {info.get('city','Not Available')}")
+    print("\n\033[91mContact ☎️\033[0m\n")
+    print(f"Phone: {info.get('phone','Not Available')}")
+    print("\n\033[95m" + "="*50 + "\033[0m\n")
+
+def print_pak_sim_results(info):
+    print("\n\033[92mPakistan SIM Info 📱\033[0m\n")
+    print(f"Name: {info.get('name','Not Available')}")
+    print(f"CNIC: {info.get('cnic','Not Available')}")
+    print(f"Address: {info.get('address','Not Available')}")
+    if "number" in info:
+        print(f"Number: {info.get('number','Not Available')}")
+    else:
+        print("Number: Not Available")
+    if "numbers" in info and isinstance(info["numbers"], list):
+        print("All Numbers: " + ", ".join(info["numbers"]))
+    else:
+        print("All Numbers: Not Available")
+    print(f"City: {info.get('city','Not Available')}")
+    print(f"Province: {info.get('province','Not Available')}")
+    print("\n\033[95m" + "="*50 + "\033[0m\n")
+
 # ================== MAIN EXECUTION BLOCK ==================
 def main():
     """Start the bot using Webhook mode for Render."""
     load_data()
     
-    # Check for required environment variables
     if not BOT_TOKEN:
         logger.critical("BOT_TOKEN not set. Exiting.")
         sys.exit(1)
 
     if not WEBHOOK_DOMAIN:
         logger.warning("WEBHOOK_DOMAIN not set. Using polling mode as fallback.")
-        # Fallback to polling if webhook domain not set
         updater = Updater(BOT_TOKEN, use_context=True)
         dp = updater.dispatcher
 
@@ -932,7 +1030,7 @@ def main():
         dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text_message))
         dp.add_handler(CallbackQueryHandler(handle_callback))
 
-        logger.info("Starting bot with POLLING mode (WEBHOOK_DOMAIN not set)...")
+        logger.info("Starting bot with POLLING mode...")
         updater.start_polling()
         updater.idle()
         return
@@ -969,11 +1067,9 @@ def main():
     logger.info(f"Webhook URL set to: {WEBHOOK_URL}")
 
     try:
-        # Set webhook first
         updater.bot.set_webhook(url=WEBHOOK_URL)
         logger.info("Webhook set successfully!")
         
-        # Then start webhook server
         updater.start_webhook(
             listen="0.0.0.0", 
             port=PORT, 
