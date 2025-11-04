@@ -600,7 +600,7 @@ def print_number_results(data):
         print(f"\033[93m👤 Name:\033[0m {name}")
         print(f"\033[96m👨‍👦 Father:\033[0m {father}")
         print(f("\033[94m📍 Address:\033[0m {address}"))
-        print(f("\033[92m📱 Mobile:\033[0m {mobile}")
+       print(f"\033[92m📱 Mobile:\033[0m {mobile}")
         print(f("\033[91m☎️ Alternate:\033[0m {alt}")
         print(f("\033[95m🌍 Circle:\033[0m {circle}")
         print(f("\033[93m🆔 ID Number:\033[0m {id_number}")
