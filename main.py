@@ -589,8 +589,17 @@ def main():
     dp.add_handler(CommandHandler("view", view_users))
     dp.add_handler(CommandHandler("broadcast", broadcast))
 
-    print("✅ Bot is running...")
-    updater.start_polling()
+    print("✅ Bot is running on webhook...")
+
+    # === Add this for Render ===
+    PORT = int(os.environ.get("PORT", 8443))
+    WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{BOT_TOKEN}"
+
+    updater.start_webhook(listen="0.0.0.0",
+                          port=PORT,
+                          url_path=BOT_TOKEN)
+    updater.bot.set_webhook(WEBHOOK_URL)
+
     updater.idle()
 
 if __name__ == "__main__":
