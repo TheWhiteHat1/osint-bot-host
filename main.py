@@ -799,25 +799,30 @@ def main():
 
     # === Webhook setup for Render ===
     PORT = int(os.environ.get("PORT", 8443))
-    RENDER_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+        WEBHOOK_PATH = f"/{TOKEN}"
+        WEBHOOK_URL_FULL = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
 
-    if RENDER_HOSTNAME:
-        WEBHOOK_URL = f"https://{RENDER_HOSTNAME}/{BOT_TOKEN}"
-        print(f"🌐 Starting webhook at {WEBHOOK_URL}")
-        updater.start_webhook(listen="0.0.0.0",
-                              port=PORT,
-                              url_path=BOT_TOKEN)
-        # Set webhook
+        logger.info(f"🚀 Starting webhook on port {PORT}")
+        logger.info(f"🌍 Webhook URL: {WEBHOOK_URL_FULL}")
+
+        updater.start_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path=TOKEN
+        )
         try:
-            updater.bot.set_webhook(WEBHOOK_URL)
+            updater.bot.set_webhook(WEBHOOK_URL_FULL)
+            logger.info("✅ Webhook set successfully!")
         except Exception as e:
-            logger.error(f"Failed to set webhook: {e}")
+            logger.error(f"❌ Failed to set webhook: {e}")
+
     else:
-        # Local fallback to polling
-        print("🧪 Local mode: starting polling")
+        # === Local Polling Fallback ===
+        logger.info("🧪 Running in local mode (polling)")
         updater.start_polling()
 
     updater.idle()
 
+# ================== ENTRY POINT ==================
 if __name__ == "__main__":
     main()
