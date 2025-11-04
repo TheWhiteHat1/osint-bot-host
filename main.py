@@ -595,16 +595,15 @@ def print_number_results(data):
             match = re.search(r"(S/O|W/O)\s+([A-Za-z ]+)", address, re.IGNORECASE)
             if match:
                 father = match.group(2).strip()
-
         print(f"\n\033[92m✅ Result {idx}\033[0m\n")
         print(f"\033[93m👤 Name:\033[0m {name}")
         print(f"\033[96m👨‍👦 Father:\033[0m {father}")
-        print(f("\033[94m📍 Address:\033[0m {address}"))
-       print(f"\033[92m📱 Mobile:\033[0m {mobile}")
-        print(f("\033[91m☎️ Alternate:\033[0m {alt}")
-        print(f("\033[95m🌍 Circle:\033[0m {circle}")
-        print(f("\033[93m🆔 ID Number:\033[0m {id_number}")
-        print(f("\033[96m✉️ Email:\033[0m {email}")
+        print(f"\033[94m📍 Address:\033[0m {address}")
+        print(f"\033[92m📱 Mobile:\033[0m {mobile}")
+        print(f"\033[91m☎️ Alternate:\033[0m {alt}")
+        print(f"\033[95m🌍 Circle:\033[0m {circle}")
+        print(f"\033[93m🆔 ID Number:\033[0m {id_number}")
+        print(f"\033[96m✉️ Email:\033[0m {email}")
         print("\n\033[95m" + "="*40 + "\033[0m\n")
 
 def print_vehicle_results(info):
