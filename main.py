@@ -8,9 +8,7 @@ import logging
 from datetime import datetime
 import urllib3
 import sys, types
-imghdr = types.ModuleType("imghdr")
-imghdr.what = lambda *a, **kw: None
-sys.modules["imghdr"] = imghdr
+
 
 
 # Disable SSL warnings
