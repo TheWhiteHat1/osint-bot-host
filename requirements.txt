@@ -9,3 +9,4 @@ cachetools==4.2.2
 pytz
 tzlocal
 tornado==6.1
+imghdr-py
