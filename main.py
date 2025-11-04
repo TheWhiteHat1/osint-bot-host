@@ -746,8 +746,8 @@ def main():
     load_data()
     
     # Check for required environment variables
-    if not BOT_TOKEN or not WEBHOOK_DOMAIN or not OWNER_CHAT_ID or not ADMIN_ID:
-        logger.critical("Critical environment variables (BOT_TOKEN, WEBHOOK_DOMAIN, OWNER_CHAT_ID, ADMIN_ID) are not set. Exiting.")
+    if not BOT_TOKEN or not WEBHOOK_DOMAIN:
+        logger.critical("Critical environment variables (BOT_TOKEN, WEBHOOK_DOMAIN) are not set. Exiting.")
         sys.exit(1)
 
     # Create the Updater and pass it your bot's token.
@@ -764,12 +764,13 @@ def main():
     dp.add_handler(CommandHandler("delete", delete_user))
     dp.add_handler(CommandHandler("ban", ban_user))
     dp.add_handler(CommandHandler("unban", unban_user))
-
-    # Handles text messages which are assumed to be lookup queries
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text_message))
     dp.add_handler(CallbackQueryHandler(handle_callback))
 
     # --- RENDER WEBHOOK CONFIGURATION ---
+    # Render assigns a dynamic port that must be listened to.
+    PORT = int(os.environ.get('PORT', 5000))
+    
     # Telegram requires a specific path for the webhook URL
     WEBHOOK_PATH = BOT_TOKEN # Use the BOT_TOKEN as a unique path
     
@@ -781,10 +782,6 @@ def main():
 
     try:
         # Start the Webhook
-        # listen="0.0.0.0" is necessary to listen on the correct network interface
-        # port=PORT is the dynamic port assigned by Render
-        # url_path=WEBHOOK_PATH is the secret path the bot listens on
-        # webhook_url=WEBHOOK_URL is the URL Telegram is set to send updates to
         updater.start_webhook(
             listen="0.0.0.0", 
             port=PORT, 
@@ -795,7 +792,6 @@ def main():
         updater.idle() # Keep the bot running
     except Exception as e:
         logger.critical(f"Failed to start bot via webhook: {e}")
-        # Optionally, you can add a fallback to Polling here, but Render generally works better with Webhook.
         sys.exit(1)
 
 
