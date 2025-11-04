@@ -1,4 +1,4 @@
-pip install python-telegram-bot==13.15
+python-telegram-bot==13.15
 requests==2.31.0
 urllib3==1.26.18
 certifi
@@ -9,4 +9,3 @@ cachetools==4.2.2
 pytz
 tzlocal
 tornado==6.1
-
