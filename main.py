@@ -425,7 +425,7 @@ def number_lookup(update: Update, context: CallbackContext, number: str):
 
     try:
         number = re.sub(r'\D', '', number)
-        url = API_URL + number  # new API doesn't require key
+        url = API_URL + number  # new API doesn't require key  <-- FIXED LINE
         res = requests.get(url, timeout=30, verify=False)
         if res.status_code == 200:
             try:
