@@ -187,8 +187,8 @@ def help_command(update: Update, context: CallbackContext):
 • 📱 Number Lookup
 • 🚘 Vehicle RC Lookup  
 • 🇵🇰 Pakistan SIM Info
-• 🏢 GST Lookup
-• 📄 PAN Lookup
+• 🏢 GST Lookup (coming soon)
+• 📄 PAN Lookup (coming soon)
 
 *How to Use:*
 1. Use /start to begin
@@ -407,11 +407,11 @@ def handle_callback(update: Update, context: CallbackContext):
             context.user_data["lookup_type"] = "Pakistan SIM Lookup"
             _safe_edit_or_reply(query, "🇵🇰 Send the Pakistan SIM number you want to search. (e.g., 03001234567)")
         elif query.data == "gst_info":
-            context.user_data["lookup_type"] = "GST Lookup"
-            _safe_edit_or_reply(query, "🏢 Send the GST number you want to search. (e.g., 07AABCU9603R1ZM)")
+            # CHANGED: Show coming soon message instead of asking for input
+            _safe_edit_or_reply(query, "🏢 *GST Lookup*\n\n⏳ This feature is coming soon! Stay tuned for updates.\n\nFor now, you can use other available lookup services.")
         elif query.data == "pan_info":
-            context.user_data["lookup_type"] = "PAN Lookup"
-            _safe_edit_or_reply(query, "📄 Send the PAN number you want to search. (e.g., AABCU9603R)")
+            # CHANGED: Show coming soon message instead of asking for input
+            _safe_edit_or_reply(query, "📄 *PAN Lookup*\n\n⏳ This feature is coming soon! Stay tuned for updates.\n\nFor now, you can use other available lookup services.")
         elif query.data == "profile":
             balance = user_credits.get(query.from_user.id, 0)
             username = query.from_user.username or "Not set"
@@ -427,8 +427,8 @@ def handle_callback(update: Update, context: CallbackContext):
 • 📱 *Number Lookup* - Get mobile number details
 • 🚘 *Vehicle Lookup* - Vehicle RC information  
 • 🇵🇰 *Pakistan SIM* - SIM card details
-• 🏢 *GST Lookup* - Business GST information
-• 📄 *PAN Lookup* - PAN card details
+• 🏢 *GST Lookup* - Coming Soon!
+• 📄 *PAN Lookup* - Coming Soon!
 
 *How to Use:*
 1. Select a lookup service
@@ -444,7 +444,6 @@ def handle_callback(update: Update, context: CallbackContext):
     except Exception as e:
         logger.error(f"Error in handle_callback: {e}")
         _safe_edit_or_reply(query, "⚠️ An error occurred handling your action.")
-
 def _handle_verify_channels(query, context):
     user_id = query.from_user.id
     bot = context.bot
