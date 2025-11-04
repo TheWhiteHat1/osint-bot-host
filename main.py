@@ -32,7 +32,7 @@ CHANNEL_1 = os.getenv("CHANNEL_1") or "@channel1_username"
 CHANNEL_2 = os.getenv("CHANNEL_2") or "@channel2_username"
 
 # APIs
-API_URL = os.getenv("API_URL") or "https://seller-ki-mkc.taitanx.workers.dev/?mobile=" # NEW API no key required
+API_URL = os.getenv("API_URL") or "https://seller-ki-mkc.taitanx.workers.dev/?mobile="
 API_URL_VEHICLE = os.getenv("API_URL_VEHICLE") or "https://rc-info-ng.vercel.app/?rc="
 API_URL_PAK_SIM = os.getenv("API_URL_PAK_SIM") or "https://allnetworkdata.com/?number="
 
