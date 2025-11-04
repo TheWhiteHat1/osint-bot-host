@@ -178,6 +178,7 @@ def _safe_edit_or_reply(query, text, parse_mode="Markdown", reply_markup=None):
             logger.error(f"Fallback reply failed: {e2}")
 
 # ================== HANDLERS ==================
+# ================== HANDLERS ==================
 def start(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     args = context.args
@@ -210,162 +211,95 @@ def start(update: Update, context: CallbackContext):
         _send_welcome(update, context, use_reply=True)
         return
 
+    # FIXED: Remove @ from channel usernames for URL
+    channel1_clean = CHANNEL_1.replace('@', '')
+    channel2_clean = CHANNEL_2.replace('@', '')
+
     # Prompt user to join channels first
     keyboard_join = [
-        [InlineKeyboardButton(f"Join Channel 1 {CHANNEL_1}", url=f"https://t.me/{CHANNEL_1.replace('@','')}")],
-        [InlineKeyboardButton(f"Join Channel 2 {CHANNEL_2}", url=f"https://t.me/{CHANNEL_2.replace('@','')}")],
-        [InlineKeyboardButton("🔁 Verify Joined Channels", callback_data="verify_channels")]
+        [InlineKeyboardButton("📢 Join Channel 1", url=f"https://t.me/{channel1_clean}")],
+        [InlineKeyboardButton("📢 Join Channel 2", url=f"https://t.me/{channel2_clean}")],
+        [InlineKeyboardButton("✅ Verify Joined Channels", callback_data="verify_channels")]
     ]
     join_markup = InlineKeyboardMarkup(keyboard_join)
 
-    caption = "⚠️ Please join both channels below to use the bot. After joining, tap *Verify Joined Channels*."
+    caption = f"""⚠️ *Please Join Our Channels*
+
+To use this bot, you need to join both of our channels:
+
+• *Channel 1:* {CHANNEL_1}
+• *Channel 2:* {CHANNEL_2}
+
+After joining, tap *Verify Joined Channels* below.
+"""
     try:
         update.message.reply_photo(photo=LOGO_URL, caption=caption, parse_mode="Markdown", reply_markup=join_markup)
     except Exception:
         update.message.reply_text(caption, parse_mode="Markdown", reply_markup=join_markup)
 
-def _send_welcome(update: Update, context: CallbackContext, use_reply=False):
-    user_id = update.effective_user.id
-    balance = user_credits.get(user_id, 0)
+def _handle_verify_channels(query, context):
+    user_id = query.from_user.id
+    bot = context.bot
 
-    welcome_text = (
-        f"👋 Welcome to DARK GP System\n"
-        f"🕒 Current Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-        "🔍 OSINT Info Bot — Get Number / Vehicle / SIM Info 📱\n\n"
-        f"💰 Credits: {balance}\n"
-        f"☎️ Support: {ADMIN_USERNAME}\n\n"
-        "⚠️ Use this service lawfully."
-    )
+    # FIXED: Check bot admin status SILENTLY - don't show error to user
+    bot_admin_1 = is_bot_admin_in(CHANNEL_1, bot)
+    bot_admin_2 = is_bot_admin_in(CHANNEL_2, bot)
 
-    keyboard = [
-        [InlineKeyboardButton("📱 Number Lookup", callback_data="number_info")],
-        [InlineKeyboardButton("🚘 Vehicle Lookup", callback_data="vehicle_info")],
-        [InlineKeyboardButton("🇵🇰 Pakistan SIM Info", callback_data="pak_sim_info")],
-        [InlineKeyboardButton("🏢 GST Lookup", callback_data="gst_info")],
-        [InlineKeyboardButton("📄 PAN Lookup", callback_data="pan_info")],
-        [InlineKeyboardButton("📂 Profile", callback_data="profile")],
-        [InlineKeyboardButton("🔗 Referral", callback_data="referral")],
-        [InlineKeyboardButton("💰 Buy Credits", url=f"https://t.me/{ADMIN_USERNAME.replace('@','')}")],
-        [InlineKeyboardButton("ℹ️ Help", callback_data="help")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    # If bot is not admin in channels, use manual verification
+    if not bot_admin_1 or not bot_admin_2:
+        # SILENT verification - just check membership without admin rights
+        member1 = is_user_member_of(CHANNEL_1, user_id, bot)
+        member2 = is_user_member_of(CHANNEL_2, user_id, bot)
 
-    try:
-        if use_reply and update.message:
-            update.message.reply_photo(photo=LOGO_URL, caption=welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
+        if member1 and member2:
+            try:
+                query.edit_message_caption("✅ Verification successful! Sending main menu...", parse_mode="Markdown")
+            except BadRequest:
+                query.message.reply_text("✅ Verification successful! Sending main menu...")
+            
+            # Send welcome menu
+            _send_welcome(update=query, context=context, use_reply=False)
         else:
-            context.bot.send_photo(chat_id=user_id, photo=LOGO_URL, caption=welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
-    except Exception:
-        if use_reply and update.message:
-            update.message.reply_text(welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
-        else:
-            context.bot.send_message(chat_id=user_id, text=welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
+            missing = []
+            if not member1:
+                missing.append(CHANNEL_1)
+            if not member2:
+                missing.append(CHANNEL_2)
+            
+            # FIXED: Simple message without admin details
+            msg = "❌ *Verification Failed*\n\nYou need to join both channels:\n"
+            for ch in missing:
+                msg += f"• {ch}\n"
+            msg += "\nPlease join them and tap *Verify Joined Channels* again."
+            
+            _safe_edit_or_reply(query, msg)
+        return
 
-def help_command(update: Update, context: CallbackContext):
-    help_text = """
-🤖 *DARK GP OSINT Bot Help*
+    # If bot is admin, use proper verification
+    member1 = is_user_member_of(CHANNEL_1, user_id, bot)
+    member2 = is_user_member_of(CHANNEL_2, user_id, bot)
 
-*Available Commands:*
-/start - Start the bot
-/help - Show this help message
-/profile - Check your profile and credits
-/referral - Get your referral link
-/credits - Check your credit balance
-
-*Lookup Services:*
-• 📱 Number Lookup
-• 🚘 Vehicle RC Lookup  
-• 🇵🇰 Pakistan SIM Info
-• 🏢 GST Lookup
-• 📄 PAN Lookup
-
-*How to Use:*
-1. Tap any lookup button
-2. Send the required information
-3. Get instant results!
-
-*Credits System:*
-- Start with 2 free credits
-- Earn 1 credit per referral
-- Buy more credits from admin
-
-*Support:* {ADMIN_USERNAME}
-    """.format(ADMIN_USERNAME=ADMIN_USERNAME)
-    
-    update.message.reply_text(help_text, parse_mode="Markdown")
-
-def profile_command(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
-    balance = user_credits.get(user_id, 0)
-    username = update.effective_user.username or "Not set"
-    first_name = update.effective_user.first_name or "Not set"
-    
-    profile_text = f"""
-👤 *User Profile*
-
-📛 *Name:* {first_name}
-🔖 *Username:* @{username}
-🆔 *User ID:* `{user_id}`
-💰 *Credits:* {balance}
-
-*Referral Stats:*
-• Total Referrals: {sum(1 for ref in referral_data.values() if ref == user_id)}
-• Referral Link: `https://t.me/{context.bot.username}?start={user_id}`
-    """
-    
-    update.message.reply_text(profile_text, parse_mode="Markdown")
-
-def referral_command(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
-    ref_link = f"https://t.me/{context.bot.username}?start={user_id}"
-    referral_count = sum(1 for ref in referral_data.values() if ref == user_id)
-    
-    ref_text = f"""
-🔗 *Referral Program*
-
-Invite friends and earn *+1 credit* for each successful referral!
-
-*Your Referral Link:*
-`{ref_link}`
-
-*Your Referral Stats:*
-• Total Referrals: {referral_count}
-• Credits Earned: {referral_count}
-
-*How it works:*
-1. Share your referral link
-2. When someone joins using your link
-3. You automatically get +1 credit
-4. They get started with 2 credits
-
-Start inviting and earn free credits! 🎁
-    """
-    
-    update.message.reply_text(ref_text, parse_mode="Markdown")
-
-def credits_command(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
-    balance = user_credits.get(user_id, 0)
-    
-    credits_text = f"""
-💰 *Credit Balance*
-
-*Current Credits:* {balance}
-
-*Ways to Get Credits:*
-• 🎁 Start bonus: 2 credits
-• 🔗 Referral: +1 credit per referral  
-• 💰 Purchase from admin
-
-*Credit Usage:*
-• Each lookup costs 1 credit
-• Check balance before searching
-
-*Need more credits?*
-Contact {ADMIN_USERNAME}
-    """
-    
-    update.message.reply_text(credits_text, parse_mode="Markdown")
+    if member1 and member2:
+        try:
+            query.edit_message_caption("✅ You are verified and joined both channels. Sending main menu...", parse_mode="Markdown")
+        except BadRequest:
+            query.message.reply_text("✅ Verification successful. Sending main menu...")
+        
+        _send_welcome(update=query, context=context, use_reply=False)
+    else:
+        missing = []
+        if not member1:
+            missing.append(CHANNEL_1)
+        if not member2:
+            missing.append(CHANNEL_2)
+        
+        # FIXED: Simple error message
+        msg = "❌ *Verification Failed*\n\nYou need to join both channels:\n"
+        for ch in missing:
+            msg += f"• {ch}\n"
+        msg += "\nPlease join them and tap *Verify Joined Channels* again."
+        
+        _safe_edit_or_reply(query, msg)
 
 def handle_callback(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -375,16 +309,18 @@ def handle_callback(update: Update, context: CallbackContext):
         pass
 
     user_id = query.from_user.id
-    if not (is_user_member_of(CHANNEL_1, user_id, context.bot) and is_user_member_of(CHANNEL_2, user_id, context.bot)):
-        if query.data != "verify_channels":
-            _safe_edit_or_reply(query, "⚠️ Please *Verify Joined Channels* first to use the bot functions.")
-            return
-
-    context.user_data.clear()
-
+    
+    # For verify_channels, always allow
     if query.data == "verify_channels":
         _handle_verify_channels(query, context)
         return
+        
+    # For other actions, check membership
+    if not (is_user_member_of(CHANNEL_1, user_id, context.bot) and is_user_member_of(CHANNEL_2, user_id, context.bot)):
+        _safe_edit_or_reply(query, "⚠️ Please use /start and *Verify Joined Channels* first to use the bot functions.")
+        return
+
+    context.user_data.clear()
 
     try:
         if query.data == "number_info":
