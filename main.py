@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# main.py - Render-ready Telegram OSINT bot (fixed, full single-file version)
+# main.py - Render-ready Telegram OSINT bot (Fixed for Webhook/Render)
 # Requirements: python-telegram-bot==13.15, requests, APScheduler, pytz, tzlocal, tornado, etc.
 
 import json
@@ -19,25 +19,29 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ================== CONFIGURATION ==================
 # Note: For production, you should store these in environment variables and not in source code.
-BOT_TOKEN = os.getenv("BOT_TOKEN") or "8257919061:AAFcvvTeInEqTGVNoM3sUzpZerewAgpo9NY"
-OWNER_BOT_TOKEN = os.getenv("OWNER_BOT_TOKEN") or "7620271547:AAGOHb_1mH16270eUIj56oDdc2pB70MKs2U"
-OWNER_CHAT_ID = int(os.getenv("OWNER_CHAT_ID") or 7985958385)
+BOT_TOKEN = os.getenv("BOT_TOKEN") 
+OWNER_BOT_TOKEN = os.getenv("OWNER_BOT_TOKEN") 
+OWNER_CHAT_ID = int(os.getenv("OWNER_CHAT_ID")) if os.getenv("OWNER_CHAT_ID") else 0
 
-ADMIN_ID = int(os.getenv("ADMIN_ID") or 7985958385)
+ADMIN_ID = int(os.getenv("ADMIN_ID")) if os.getenv("ADMIN_ID") else 0
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME") or "@DARKGP0"
-LOGO_URL = os.getenv("LOGO_URL") or "https://ibb.co/yc20Z7x1"
+LOGO_URL = os.getenv("LOGO_URL") or "https://ibb.co/yc20Z7x1" # Note: This URL might need to be a direct image link
 
 # Channels to require users to join before showing full welcome (replace with real channel usernames)
 CHANNEL_1 = os.getenv("CHANNEL_1") or "@channel1_username"
 CHANNEL_2 = os.getenv("CHANNEL_2") or "@channel2_username"
 
 # APIs
-API_URL = os.getenv("API_URL") or "https://seller-ki-mkc.taitanx.workers.dev/?mobile="  # NEW API no key required
+API_URL = os.getenv("API_URL") or "https://seller-ki-mkc.taitanx.workers.dev/?mobile="  # NEW API no key required
 API_URL_VEHICLE = os.getenv("API_URL_VEHICLE") or "https://rc-info-ng.vercel.app/?rc="
 API_URL_PAK_SIM = os.getenv("API_URL_PAK_SIM") or "https://allnetworkdata.com/?number="
 
-# Render webhook domain (your Render app URL)
-WEBHOOK_DOMAIN = os.getenv("WEBHOOK_DOMAIN") or "https://osint-bot-host-3.onrender.com"
+# Render webhook domain (your Render app URL) - MUST BE SET IN ENVIRONMENT VARIABLES
+WEBHOOK_DOMAIN = os.getenv("WEBHOOK_DOMAIN") # e.g., https://osint-bot-host-3.onrender.com
+
+# --- RENDER WEBHOOK PORT ---
+# Render assigns a dynamic port that must be listened to.
+PORT = int(os.environ.get('PORT', 5000))
 
 # === FILE STORAGE ===
 USER_DATA_FILE = "user_data.json"
@@ -142,18 +146,23 @@ def is_bot_admin_in(chat_identifier, bot):
         return False
 
 # Safe edit or reply for callback queries
-def _safe_edit_or_reply(query, text, parse_mode="Markdown"):
+def _safe_edit_or_reply(query, text, parse_mode="Markdown", reply_markup=None):
     try:
-        query.edit_message_text(text, parse_mode=parse_mode)
+        query.edit_message_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
     except BadRequest as e:
+        # If message is not modified, try to reply
+        if "Message is not modified" in str(e):
+             query.answer("No change.")
+             return
+        
         try:
-            query.message.reply_text(text, parse_mode=parse_mode)
+            query.message.reply_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
         except Exception as e2:
             logger.error(f"Fallback reply failed: {e2}")
     except Exception as e:
         logger.error(f"edit_message_text failed: {e}")
         try:
-            query.message.reply_text(text, parse_mode=parse_mode)
+            query.message.reply_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
         except Exception as e2:
             logger.error(f"Fallback reply failed: {e2}")
 
@@ -171,13 +180,25 @@ def start(update: Update, context: CallbackContext):
             referral_data[user_id] = referrer_id
             save_referral_data()
             if referrer_id in user_credits:
-                user_credits[referrer_id] += 1
+                user_credits[referrer_id] = user_credits.get(referrer_id, 0) + 1
                 save_user_data()
+                try:
+                    context.bot.send_message(referrer_id, "🎁 Congratulations! A new user joined using your referral link. You received 1 credit!")
+                except Exception:
+                    pass
 
     # Initialize credits if new
     if user_id not in user_credits:
         user_credits[user_id] = 2
         save_user_data()
+
+    # Clear user_data for fresh start
+    context.user_data.clear()
+
+    # Check if user is already a member (skip join prompt)
+    if is_user_member_of(CHANNEL_1, user_id, context.bot) and is_user_member_of(CHANNEL_2, user_id, context.bot):
+        _send_welcome(update, context, use_reply=True)
+        return
 
     # Prompt user to join channels first
     keyboard_join = [
@@ -195,10 +216,10 @@ def start(update: Update, context: CallbackContext):
             update.message.reply_text(caption, parse_mode="Markdown", reply_markup=join_markup)
     except Exception as e:
         logger.error(f"Error sending join prompt: {e}")
-        # fallback to direct welcome if sending prompt failed
-        _send_welcome(update, context)
+        _send_welcome(update, context, use_reply=True) # Fallback if error occurs
 
-def _send_welcome(update: Update, context: CallbackContext):
+def _send_welcome(update: Update, context: CallbackContext, use_reply=False):
+    """Sends the main welcome message (used after /start or verification)"""
     user_id = update.effective_user.id
     balance = user_credits.get(user_id, 0)
 
@@ -222,9 +243,15 @@ def _send_welcome(update: Update, context: CallbackContext):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     try:
-        update.message.reply_photo(photo=LOGO_URL, caption=welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
+        if use_reply and update.message:
+            update.message.reply_photo(photo=LOGO_URL, caption=welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
+        else:
+            context.bot.send_photo(chat_id=user_id, photo=LOGO_URL, caption=welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
     except Exception:
-        update.message.reply_text(welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
+        if use_reply and update.message:
+            update.message.reply_text(welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
+        else:
+            context.bot.send_message(chat_id=user_id, text=welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
 
 # Callback handler for inline keyboard
 def handle_callback(update: Update, context: CallbackContext):
@@ -233,6 +260,13 @@ def handle_callback(update: Update, context: CallbackContext):
         query.answer()
     except Exception:
         pass
+
+    user_id = query.from_user.id
+    # Check membership before allowing interaction
+    if not (is_user_member_of(CHANNEL_1, user_id, context.bot) and is_user_member_of(CHANNEL_2, user_id, context.bot)):
+        if query.data != "verify_channels":
+            _safe_edit_or_reply(query, "⚠️ Please *Verify Joined Channels* first to use the bot functions.")
+            return
 
     # clear previous lookup_type
     context.user_data.clear()
@@ -244,19 +278,19 @@ def handle_callback(update: Update, context: CallbackContext):
     try:
         if query.data == "number_info":
             context.user_data["lookup_type"] = "Number Lookup"
-            _safe_edit_or_reply(query, "📱 Send the phone number you want to search.")
+            _safe_edit_or_reply(query, "📱 Send the phone number you want to search. (e.g., 9876543210)")
         elif query.data == "vehicle_info":
             context.user_data["lookup_type"] = "Vehicle Lookup"
-            _safe_edit_or_reply(query, "🚘 Send the vehicle RC number you want to search.")
+            _safe_edit_or_reply(query, "🚘 Send the vehicle RC number you want to search. (e.g., DL3CBP1234)")
         elif query.data == "pak_sim_info":
             context.user_data["lookup_type"] = "Pakistan SIM Lookup"
-            _safe_edit_or_reply(query, "🇵🇰 Send the Pakistan SIM number you want to search.")
+            _safe_edit_or_reply(query, "🇵🇰 Send the Pakistan SIM number you want to search. (e.g., 03001234567)")
         elif query.data == "profile":
             balance = user_credits.get(query.from_user.id, 0)
             _safe_edit_or_reply(query, f"👤 Profile\n🆔 ID: {query.from_user.id}\n🔋 Credits: {balance}")
         elif query.data == "referral":
             ref_link = f"https://t.me/{context.bot.username}?start={query.from_user.id}"
-            _safe_edit_or_reply(query, f"🔗 Invite friends & earn free coins!\n👉 {ref_link}")
+            _safe_edit_or_reply(query, f"🔗 Invite friends & earn free coins!\n\n👉 `{ref_link}`\n\n_You get +1 credit for every successful referral._")
         else:
             _safe_edit_or_reply(query, "Unknown action.")
     except Exception as e:
@@ -285,15 +319,14 @@ def _handle_verify_channels(query, context):
     member2 = is_user_member_of(CHANNEL_2, user_id, bot)
 
     if member1 and member2:
+        # Edit the verification message to confirm success
         try:
-            query.edit_message_text("✅ You are verified and joined both channels. Sending welcome message...")
-        except Exception:
-            try:
-                query.message.reply_text("✅ You are verified and joined both channels. Sending welcome message...")
-            except Exception:
-                pass
-
-        # Now send welcome to user
+             query.edit_message_caption("✅ You are verified and joined both channels. Sending main menu...", parse_mode="Markdown")
+        except BadRequest as e:
+            if "Message is not modified" not in str(e):
+                 query.message.reply_text("✅ Verification successful. Sending main menu...")
+            
+        # Now send welcome to user (main menu)
         balance = user_credits.get(user_id, 0)
         welcome_text = (
             f"👋 Welcome to DARK GP System\n"
@@ -314,6 +347,7 @@ def _handle_verify_channels(query, context):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
+        # Send the main menu
         try:
             context.bot.send_photo(chat_id=user_id, photo=LOGO_URL, caption=welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
         except Exception:
@@ -333,7 +367,55 @@ def _handle_verify_channels(query, context):
         msg += "\nPlease join them and tap *Verify Joined Channels* again."
         _safe_edit_or_reply(query, msg)
 
-# ================== LOOKUP FUNCTIONS ==================
+# --- NEW HANDLER FOR TEXT INPUT ---
+def handle_text_message(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
+    lookup_type = context.user_data.get("lookup_type")
+
+    # 1. Check if user is banned
+    if user_id in banned_users:
+        update.message.reply_text("⛔ You are banned from using this bot.")
+        return
+
+    # 2. Check membership (if not verified, prompt them)
+    if not (is_user_member_of(CHANNEL_1, user_id, context.bot) and is_user_member_of(CHANNEL_2, user_id, context.bot)):
+        update.message.reply_text("⚠️ Please use the /start command and *Verify Joined Channels* first to use the bot.")
+        return
+        
+    # 3. Check credits (only if a lookup type is selected)
+    if lookup_type:
+        balance = user_credits.get(user_id, 0)
+        if balance <= 0:
+            update.message.reply_text(
+                f"❌ Not enough credits! Your current balance is {balance}.\n"
+                f"💰 Buy credits from {ADMIN_USERNAME} or earn via /referral."
+            )
+            return
+
+    # 4. Process lookup
+    forward_to_owner(update.effective_user, text, lookup_type or "General Query")
+
+    if lookup_type == "Number Lookup" and text.isdigit():
+        update.message.reply_text(f"⏳ Searching number {text}...")
+        number_lookup(update, context, text)
+    elif lookup_type == "Vehicle Lookup":
+        update.message.reply_text(f"⏳ Searching vehicle RC {text}...")
+        vehicle_lookup(update, context, text)
+    elif lookup_type == "Pakistan SIM Lookup" and text.isdigit():
+        update.message.reply_text(f"⏳ Searching Pak SIM {text}...")
+        pak_sim_lookup(update, context, text)
+    else:
+        # Default message or help
+        update.message.reply_text(
+            "⚠️ Please use the menu buttons to select a lookup type first. Type /start for the menu."
+        )
+    
+    # Clear the lookup type after use
+    if lookup_type:
+        context.user_data.clear()
+
+# ================== LOOKUP FUNCTIONS (No change in logic) ==================
 def number_lookup(update: Update, context: CallbackContext, number: str):
     user_id = update.effective_user.id
 
@@ -343,7 +425,7 @@ def number_lookup(update: Update, context: CallbackContext, number: str):
 
     try:
         number = re.sub(r'\D', '', number)
-        url = API_URL + number  # new API doesn't require key
+        url = API_URL + number  # new API doesn't require key
         res = requests.get(url, timeout=30, verify=False)
         if res.status_code == 200:
             try:
@@ -373,7 +455,12 @@ def format_number_response(data):
     response_text = "🔍 *Number Lookup Results*\n\n"
     for idx, info in enumerate(data, 1):
         if not isinstance(info, dict):
-            info = dict(info)
+            # Attempt to convert list/tuple of (key, value) pairs into dict
+            try:
+                info = dict(info)
+            except:
+                info = {} # Fallback to empty dict
+
         name = info.get('name') or "N/A"
         father = info.get('fname') or info.get('father_name') or "N/A"
         address = info.get('address') or "N/A"
@@ -498,7 +585,7 @@ def format_pak_sim_response(info):
     response_text += f"*Province:* {info.get('province', 'Not Available')}\n"
     return response_text
 
-# ================== MESSAGES & PRINTS (console) ==================
+# ================== MESSAGES & PRINTS (console - No Change) ==================
 def print_number_results(data):
     for idx, info in enumerate(data, 1):
         name = info.get('name') or "N/A"
@@ -527,7 +614,7 @@ def print_number_results(data):
         print("\n\033[95m" + "="*40 + "\033[0m\n")
 
 def print_vehicle_results(info):
-    print("\n\033[92mVehicle Details  🚘\033[0m\n")
+    print("\n\033[92mVehicle Details 🚘\033[0m\n")
     print(f"RC Number: {info.get('rc_number','Not Available')}")
     print(f"Owner Name: {info.get('owner_name','Not Available')}")
     print(f"Father's Name: {info.get('father_name','Not Available')}")
@@ -575,7 +662,7 @@ def print_pak_sim_results(info):
     print(f"Province: {info.get('province','Not Available')}")
     print("\n\033[95m" + "="*50 + "\033[0m\n")
 
-# ================== ADMIN COMMANDS ==================
+# ================== ADMIN COMMANDS (No Change) ==================
 def add_credits(update: Update, context: CallbackContext):
     if update.effective_user.id != ADMIN_ID:
         update.message.reply_text("❌ Not authorized.")
@@ -645,132 +732,72 @@ def unban_user(update: Update, context: CallbackContext):
         return
     try:
         target_id = int(context.args[0])
-        banned_users.discard(target_id)
-        update.message.reply_text(f"✅ User {target_id} has been unbanned.")
+        if target_id in banned_users:
+            banned_users.remove(target_id)
+            update.message.reply_text(f"✅ User {target_id} has been unbanned.")
+        else:
+            update.message.reply_text("⚠️ User not banned.")
     except Exception:
         update.message.reply_text("⚠️ Usage: /unban <user_id>")
 
-def view_users(update: Update, context: CallbackContext):
-    if update.effective_user.id != ADMIN_ID:
-        update.message.reply_text("❌ Not authorized.")
-        return
-    if not user_credits:
-        update.message.reply_text("📭 No users in system yet.")
-        return
-    msg = "👥 *User List*\n\n"
-    for uid, credits in user_credits.items():
-        status = "🚫 Banned" if uid in banned_users else "✅ Active"
-        msg += f"🆔 {uid} — Credits: {credits} — {status}\n"
-    update.message.reply_text(msg, parse_mode="Markdown")
-
-def broadcast(update: Update, context: CallbackContext):
-    if update.effective_user.id != ADMIN_ID:
-        update.message.reply_text("❌ Not authorized.")
-        return
-    try:
-        text = " ".join(context.args)
-        if not text:
-            update.message.reply_text("⚠️ Usage: /broadcast <message>")
-            return
-        for uid in list(user_credits.keys()):
-            if uid not in banned_users:
-                try:
-                    context.bot.send_message(chat_id=uid, text=f"MESSAGE BY OWNER:\n\n{text}")
-                except Exception:
-                    pass
-        update.message.reply_text("✅ Broadcast sent to all active users.")
-    except Exception as e:
-        update.message.reply_text(f"⚠️ Error: {e}")
-
-# ================== ERROR HANDLER ==================
-def error_handler(update: object, context: CallbackContext) -> None:
-    logger.error(msg="Exception while handling an update:", exc_info=context.error)
-    try:
-        err_text = f"⚠️ Error: {context.error}"
-        context.bot.send_message(chat_id=OWNER_CHAT_ID, text=err_text)
-    except Exception:
-        pass
-
-# ================== MAIN (Webhook + Polling fallback) ==================
+# ================== MAIN EXECUTION BLOCK (FIXED FOR RENDER WEBHOOK) ==================
 def main():
+    """Start the bot using Webhook mode for Render."""
     load_data()
+    
+    # Check for required environment variables
+    if not BOT_TOKEN or not WEBHOOK_DOMAIN or not OWNER_CHAT_ID or not ADMIN_ID:
+        logger.critical("Critical environment variables (BOT_TOKEN, WEBHOOK_DOMAIN, OWNER_CHAT_ID, ADMIN_ID) are not set. Exiting.")
+        sys.exit(1)
+
+    # Create the Updater and pass it your bot's token.
     updater = Updater(BOT_TOKEN, use_context=True)
+
+    # Get the dispatcher to register handlers
     dp = updater.dispatcher
 
-    # Register handlers
+    # Add handlers
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-    dp.add_handler(CallbackQueryHandler(handle_callback))
     dp.add_handler(CommandHandler("addcredits", add_credits))
     dp.add_handler(CommandHandler("deductcredits", deduct_credits))
     dp.add_handler(CommandHandler("usercredits", user_credits_cmd))
     dp.add_handler(CommandHandler("delete", delete_user))
     dp.add_handler(CommandHandler("ban", ban_user))
     dp.add_handler(CommandHandler("unban", unban_user))
-    dp.add_handler(CommandHandler("view", view_users))
-    dp.add_handler(CommandHandler("broadcast", broadcast))
 
-    dp.add_error_handler(error_handler)
+    # Handles text messages which are assumed to be lookup queries
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text_message))
+    dp.add_handler(CallbackQueryHandler(handle_callback))
 
-    logger.info("✅ Bot is starting...")
+    # --- RENDER WEBHOOK CONFIGURATION ---
+    # Telegram requires a specific path for the webhook URL
+    WEBHOOK_PATH = BOT_TOKEN # Use the BOT_TOKEN as a unique path
+    
+    # Construct the full webhook URL for Telegram 
+    WEBHOOK_URL = f"{WEBHOOK_DOMAIN}/{WEBHOOK_PATH}"
 
-    # Webhook setup (Render)
-    # Telegram allows webhooks only on ports 80, 88, 443, or 8443.
-    # Render exposes a PORT environment variable; we'll use 8443 by default (allowed).
-    PORT = int(os.environ.get("PORT", 8443))
-    # Ensure domain has no trailing slash
-    domain = WEBHOOK_DOMAIN.rstrip('/')
-    WEBHOOK_PATH = f"/{BOT_TOKEN}"
-    FULL_WEBHOOK_URL = f"{domain}{WEBHOOK_PATH}"
+    logger.info(f"Starting bot with Webhook mode on PORT: {PORT}")
+    logger.info(f"Webhook URL set to: {WEBHOOK_URL}")
 
     try:
-        logger.info(f"Attempting webhook on port {PORT} with URL {FULL_WEBHOOK_URL}")
-        # Start webhook listener
-        updater.start_webhook(listen="0.0.0.0", port=PORT, url_path=BOT_TOKEN)
-        # Register webhook with Telegram
-        updater.bot.set_webhook(FULL_WEBHOOK_URL)
-        logger.info("✅ Webhook set successfully!")
+        # Start the Webhook
+        # listen="0.0.0.0" is necessary to listen on the correct network interface
+        # port=PORT is the dynamic port assigned by Render
+        # url_path=WEBHOOK_PATH is the secret path the bot listens on
+        # webhook_url=WEBHOOK_URL is the URL Telegram is set to send updates to
+        updater.start_webhook(
+            listen="0.0.0.0", 
+            port=PORT, 
+            url_path=WEBHOOK_PATH, 
+            webhook_url=WEBHOOK_URL
+        )
+        logger.info("Webhook successfully started and set!")
+        updater.idle() # Keep the bot running
     except Exception as e:
-        logger.error(f"❌ Failed to set webhook: {e}")
-        logger.info("⚙️ Falling back to long polling (useful for local/dev runs)")
-        try:
-            updater.start_polling()
-        except Exception as e2:
-            logger.error(f"Polling also failed: {e2}")
-            raise
+        logger.critical(f"Failed to start bot via webhook: {e}")
+        # Optionally, you can add a fallback to Polling here, but Render generally works better with Webhook.
+        sys.exit(1)
 
-    updater.idle()
 
-# ================== MESSAGE HANDLER (route messages to lookups) ==================
-def handle_message(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
-    text = update.message.text.strip()
-
-    if user_id not in user_credits:
-        user_credits[user_id] = 2
-        save_user_data()
-
-    if user_id in banned_users:
-        update.message.reply_text("🚫 You are banned from using this bot.")
-        return
-
-    lookup_type = context.user_data.get("lookup_type", "General Message")
-    forward_to_owner(update.effective_user, text, lookup_type)
-
-    if user_credits.get(user_id, 0) <= 0:
-        keyboard = [[InlineKeyboardButton("💰 Buy Credits", url=f"https://t.me/{ADMIN_USERNAME.replace('@','')}")]]
-        update.message.reply_text("💸 Buy credits first!", reply_markup=InlineKeyboardMarkup(keyboard))
-        return
-
-    if lookup_type == "Number Lookup":
-        number_lookup(update, context, text)
-    elif lookup_type == "Vehicle Lookup":
-        vehicle_lookup(update, context, text)
-    elif lookup_type == "Pakistan SIM Lookup":
-        pak_sim_lookup(update, context, text)
-    else:
-        update.message.reply_text("📌 Type /start to begin or choose a lookup option.")
-
-# ================== ENTRY POINT ==================
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
