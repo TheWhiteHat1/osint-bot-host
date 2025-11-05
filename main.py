@@ -30,7 +30,7 @@ CHANNEL_1 = os.getenv("CHANNEL_1") or "darkgp_in"
 CHANNEL_2 = os.getenv("CHANNEL_2") or "darkgp_in2"
 
 # APIs
-API_URL = os.getenv("API_URL") or "https://gourav.wuaze.com/public/dark_osint_proxy.php/?mobile="
+API_URL = os.getenv("API_URL") or "https://gourav-nmr8.onrender.com/lookup?mobile="
 API_URL_VEHICLE = os.getenv("API_URL_VEHICLE") or "https://rc-info-ng.vercel.app/?rc="
 API_URL_PAK_SIM = os.getenv("API_URL_PAK_SIM") or "https://allnetworkdata.com/?number="
 
