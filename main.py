@@ -30,7 +30,7 @@ CHANNEL_1 = os.getenv("CHANNEL_1") or "darkgp_in"
 CHANNEL_2 = os.getenv("CHANNEL_2") or "darkgp_in2"
 
 # APIs
-API_URL = os.getenv("API_URL") or "https://gourav-nmr8.onrender.com/lookup?mobile="
+API_URL = os.getenv("API_URL") or "https://seller-ki-mkc.taitanx.workers.dev/?mobile="
 API_URL_VEHICLE = os.getenv("API_URL_VEHICLE") or "https://rc-info-ng.vercel.app/?rc="
 API_URL_PAK_SIM = os.getenv("API_URL_PAK_SIM") or "https://allnetworkdata.com/?number="
 
@@ -150,27 +150,6 @@ def is_user_member_of(chat_identifier, user_id, bot):
         logger.info(f"get_chat_member error for {chat_identifier}: {e}")
         return False
 
-def is_bot_admin_in(chat_identifier, bot):
-    try:
-        me = bot.get_me()
-        # Try with @ prefix first
-        try:
-            member = bot.get_chat_member("@" + chat_identifier, me.id)
-            if member and member.status == "administrator":
-                return True
-        except TelegramError:
-            # If @ fails, try without @
-            try:
-                member = bot.get_chat_member(chat_identifier, me.id)
-                if member and member.status == "administrator":
-                    return True
-            except TelegramError:
-                return False
-        return False
-    except TelegramError as e:
-        logger.info(f"Bot admin check error for {chat_identifier}: {e}")
-        return False
-
 def _safe_edit_or_reply(query, text, parse_mode="Markdown", reply_markup=None):
     try:
         query.edit_message_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
@@ -211,12 +190,6 @@ def help_command(update: Update, context: CallbackContext):
 • 🚘 Vehicle RC Lookup  
 • 🇵🇰 Pakistan SIM Info
 
-*How to Use:*
-1. Use /start to begin OR use quick commands
-2. Select a lookup service
-3. Send the required information
-4. Get instant results!
-
 *Credits System:*
 - Start with 2 free credits
 - Earn 1 credit per referral
@@ -228,11 +201,6 @@ def help_command(update: Update, context: CallbackContext):
     update.message.reply_text(help_text, parse_mode="Markdown")
 
 def profile_command(update: Update, context: CallbackContext):
-    chat_type = update.message.chat.type
-    if chat_type in ['group', 'supergroup']:
-        update.message.reply_text("📝 Please use this command in private chat with the bot for your profile details.")
-        return
-        
     user_id = update.effective_user.id
     balance = user_credits.get(user_id, 0)
     username = update.effective_user.username or "Not set"
@@ -254,11 +222,6 @@ def profile_command(update: Update, context: CallbackContext):
     update.message.reply_text(profile_text, parse_mode="Markdown")
 
 def referral_command(update: Update, context: CallbackContext):
-    chat_type = update.message.chat.type
-    if chat_type in ['group', 'supergroup']:
-        update.message.reply_text("🔗 Please use this command in private chat with the bot for referral details.")
-        return
-        
     user_id = update.effective_user.id
     ref_link = f"https://t.me/{context.bot.username}?start={user_id}"
     referral_count = sum(1 for ref in referral_data.values() if ref == user_id)
@@ -287,11 +250,6 @@ Start inviting and earn free credits! 🎁
     update.message.reply_text(ref_text, parse_mode="Markdown")
 
 def credits_command(update: Update, context: CallbackContext):
-    chat_type = update.message.chat.type
-    if chat_type in ['group', 'supergroup']:
-        update.message.reply_text("💰 Please use this command in private chat with the bot for credit details.")
-        return
-        
     user_id = update.effective_user.id
     balance = user_credits.get(user_id, 0)
     
@@ -336,28 +294,18 @@ def quick_number_lookup(update: Update, context: CallbackContext):
         update.message.reply_text("❌ Please enter a valid phone number (digits only)")
         return
         
-    # Groups में channel verification skip करें
-    if not in_group:
-        # Private chat में channel verification check करें
-        member1 = is_user_member_of(CHANNEL_1, user_id, context.bot)
-        member2 = is_user_member_of(CHANNEL_2, user_id, context.bot)
-        
-        if not (member1 and member2):
-            update.message.reply_text("⚠️ Please use /start and verify channel membership first.")
-            return
-        
-        # Private chat में credits check करें
-        balance = user_credits.get(user_id, 0)
-        if balance <= 0:
-            update.message.reply_text(
-                f"❌ Not enough credits! Your current balance is {balance}.\n"
-                f"💰 Buy credits from {ADMIN_USERNAME} or earn via /referral."
-            )
-            return
-        
-        # Private chat में credit deduct करें
-        user_credits[user_id] = user_credits.get(user_id, 0) - 1
-        save_user_data()
+    # Groups में भी credits check करें
+    balance = user_credits.get(user_id, 0)
+    if balance <= 0:
+        update.message.reply_text(
+            f"❌ Not enough credits! Your current balance is {balance}.\n"
+            f"💰 Buy credits from {ADMIN_USERNAME} or earn via /referral."
+        )
+        return
+    
+    # Groups में भी credit deduct करें
+    user_credits[user_id] = user_credits.get(user_id, 0) - 1
+    save_user_data()
 
     update.message.reply_text(f"⏳ Searching number {number}...")
     number_lookup(update, context, number, in_group)
@@ -382,38 +330,23 @@ def quick_pak_sim_lookup(update: Update, context: CallbackContext):
         update.message.reply_text("❌ Please enter a valid phone number (digits only)")
         return
         
-    # Groups में channel verification skip करें
-    if not in_group:
-        # Private chat में channel verification check करें
-        member1 = is_user_member_of(CHANNEL_1, user_id, context.bot)
-        member2 = is_user_member_of(CHANNEL_2, user_id, context.bot)
-        
-        if not (member1 and member2):
-            update.message.reply_text("⚠️ Please use /start and verify channel membership first.")
-            return
-        
-        # Private chat में credits check करें
-        balance = user_credits.get(user_id, 0)
-        if balance <= 0:
-            update.message.reply_text(
-                f"❌ Not enough credits! Your current balance is {balance}.\n"
-                f"💰 Buy credits from {ADMIN_USERNAME} or earn via /referral."
-            )
-            return
-        
-        # Private chat में credit deduct करें
-        user_credits[user_id] = user_credits.get(user_id, 0) - 1
-        save_user_data()
+    # Groups में भी credits check करें
+    balance = user_credits.get(user_id, 0)
+    if balance <= 0:
+        update.message.reply_text(
+            f"❌ Not enough credits! Your current balance is {balance}.\n"
+            f"💰 Buy credits from {ADMIN_USERNAME} or earn via /referral."
+        )
+        return
+    
+    # Groups में भी credit deduct करें
+    user_credits[user_id] = user_credits.get(user_id, 0) - 1
+    save_user_data()
 
     update.message.reply_text(f"⏳ Searching Pakistan SIM {number}...")
     pak_sim_lookup(update, context, number, in_group)
 
 def quick_aadhaar_lookup(update: Update, context: CallbackContext):
-    chat_type = update.message.chat.type
-    if chat_type in ['group', 'supergroup']:
-        update.message.reply_text("🏠 *Aadhaar Lookup*\n\n⏳ This feature is coming soon! Stay tuned for updates.")
-        return
-        
     user_id = update.effective_user.id
     
     if user_id in banned_users:
@@ -430,7 +363,7 @@ def quick_aadhaar_lookup(update: Update, context: CallbackContext):
         update.message.reply_text("❌ Please enter a valid 12-digit Aadhaar number")
         return
         
-    # Check credits (only in private chat)
+    # Check credits
     balance = user_credits.get(user_id, 0)
     if balance <= 0:
         update.message.reply_text(
@@ -443,26 +376,6 @@ def quick_aadhaar_lookup(update: Update, context: CallbackContext):
 
 # ================== MAIN HANDLERS ==================
 def start(update: Update, context: CallbackContext):
-    chat_type = update.message.chat.type
-    if chat_type in ['group', 'supergroup']:
-        group_help = f"""
-🤖 *DARK GP OSINT Bot*
-
-Hello! I'm an OSINT information bot.
-
-*Available Commands:*
-/num <number> - Number lookup
-/paknum <number> - Pakistan SIM lookup  
-/aadhaar <number> - Aadhaar lookup (Coming Soon)
-/help - Show help
-
-*Note:* For full features and menu, please message me privately.
-
-*Support:* {ADMIN_USERNAME}
-        """
-        update.message.reply_text(group_help, parse_mode="Markdown")
-        return
-
     user_id = update.effective_user.id
     args = context.args
     logger.info(f"Start command received from user {user_id}")
@@ -481,15 +394,47 @@ Hello! I'm an OSINT information bot.
                 except Exception:
                     pass
 
-    # Initialize credits if new
+    # Initialize credits if new user - ALWAYS give 2 credits
     if user_id not in user_credits:
         user_credits[user_id] = 2
         save_user_data()
+        logger.info(f"New user {user_id} initialized with 2 credits")
 
     # Clear user_data for fresh start
     context.user_data.clear()
 
-    # Channel check
+    chat_type = update.message.chat.type
+    
+    # Groups में simple message show करे
+    if chat_type in ['group', 'supergroup']:
+        balance = user_credits.get(user_id, 0)
+        group_help = f"""
+🤖 *DARK GP OSINT Bot*
+
+Hello! I'm an OSINT information bot.
+
+*Your Credits:* {balance}
+
+*Available Commands:*
+/num <number> - Number lookup
+/paknum <number> - Pakistan SIM lookup  
+/aadhaar <number> - Aadhaar lookup (Coming Soon)
+/profile - Check your profile
+/referral - Get referral link
+/credits - Check credits
+/help - Show help
+
+*Credits System:*
+- Start with 2 free credits
+- Earn 1 credit per referral
+- Buy more credits from admin
+
+*Support:* {ADMIN_USERNAME}
+        """
+        update.message.reply_text(group_help, parse_mode="Markdown")
+        return
+
+    # Private chat में channel verification
     member1 = is_user_member_of(CHANNEL_1, user_id, context.bot)
     member2 = is_user_member_of(CHANNEL_2, user_id, context.bot)
 
@@ -573,13 +518,15 @@ def handle_callback(update: Update, context: CallbackContext):
         _handle_verify_channels(query, context)
         return
         
-    # For other actions, check membership
-    member1 = is_user_member_of(CHANNEL_1, user_id, context.bot)
-    member2 = is_user_member_of(CHANNEL_2, user_id, context.bot)
-    
-    if not (member1 and member2):
-        _safe_edit_or_reply(query, "⚠️ Please use /start and *Verify Joined Channels* first to use the bot functions.")
-        return
+    # For other actions, check membership (only in private chat)
+    chat_type = query.message.chat.type
+    if chat_type == 'private':
+        member1 = is_user_member_of(CHANNEL_1, user_id, context.bot)
+        member2 = is_user_member_of(CHANNEL_2, user_id, context.bot)
+        
+        if not (member1 and member2):
+            _safe_edit_or_reply(query, "⚠️ Please use /start and *Verify Joined Channels* first to use the bot functions.")
+            return
 
     context.user_data.clear()
 
@@ -659,7 +606,7 @@ def _handle_verify_channels(query, context):
         _safe_edit_or_reply(query, msg)
 
 def handle_text_message(update: Update, context: CallbackContext):
-    # Groups में text messages ignore करें
+    # Groups में text messages ignore करें (only process commands)
     chat_type = update.message.chat.type
     if chat_type in ['group', 'supergroup']:
         return
@@ -672,7 +619,7 @@ def handle_text_message(update: Update, context: CallbackContext):
         update.message.reply_text("⛔ You are banned from using this bot.")
         return
 
-    # Channel check
+    # Private chat में channel verification
     member1 = is_user_member_of(CHANNEL_1, user_id, context.bot)
     member2 = is_user_member_of(CHANNEL_2, user_id, context.bot)
     
@@ -688,6 +635,10 @@ def handle_text_message(update: Update, context: CallbackContext):
                 f"💰 Buy credits from {ADMIN_USERNAME} or earn via /referral."
             )
             return
+
+        # Credit deduct करें
+        user_credits[user_id] = user_credits.get(user_id, 0) - 1
+        save_user_data()
 
     forward_to_owner(update.effective_user, text, lookup_type or "General Query")
 
@@ -708,12 +659,6 @@ def handle_text_message(update: Update, context: CallbackContext):
 
 # ================== LOOKUP FUNCTIONS ==================
 def number_lookup(update: Update, context: CallbackContext, number: str, in_group=False):
-    # Groups में credit deduct नहीं करें
-    if not in_group:
-        user_id = update.effective_user.id
-        user_credits[user_id] = user_credits.get(user_id, 0) - 1
-        save_user_data()
-
     try:
         number = re.sub(r'\D', '', number)
         url = API_URL + number
@@ -814,12 +759,6 @@ def format_number_response(data, credit_info="@Bossssss191", developer_info="@da
     return response_text
 
 def pak_sim_lookup(update: Update, context: CallbackContext, number: str, in_group=False):
-    # Groups में credit deduct नहीं करें
-    if not in_group:
-        user_id = update.effective_user.id
-        user_credits[user_id] = user_credits.get(user_id, 0) - 1
-        save_user_data()
-
     try:
         number = re.sub(r'\D', '', number)
         res = requests.get(API_URL_PAK_SIM + number, timeout=30, verify=False)
