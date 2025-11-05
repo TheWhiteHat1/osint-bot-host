@@ -418,13 +418,13 @@ def start(update: Update, context: CallbackContext):
     if chat_type in ['group', 'supergroup']:
         balance = user_credits.get(user_id, 0)
         group_help = f"""
-🤖 *DARK GP OSINT Bot*
+🤖 DARK GP OSINT Bot
 
 Hello! I'm an OSINT information bot.
 
-*Your Credits:* {balance}
+Your Credits: {balance}
 
-*Available Commands:*
+Available Commands:
 /num <number> - Number lookup
 /paknum <number> - Pakistan SIM lookup  
 /aadhaar <number> - Aadhaar lookup (Coming Soon)
@@ -433,14 +433,14 @@ Hello! I'm an OSINT information bot.
 /credits - Check credits
 /help - Show help
 
-*Credits System:*
+Credits System:
 - Start with 2 free credits
 - Earn 1 credit per referral
 - Buy more credits from admin
 
-*Support:* {ADMIN_USERNAME}
+Support: {ADMIN_USERNAME}
         """
-        update.message.reply_text(group_help, parse_mode="Markdown")
+        update.message.reply_text(group_help)
         return
 
     # Private chat में channel verification
@@ -452,7 +452,7 @@ Hello! I'm an OSINT information bot.
         _send_welcome(update, context, use_reply=True)
         return
 
-    # Prompt user to join channels first - FIXED MARKDOWN
+    # Prompt user to join channels first - FIXED: No Markdown
     keyboard_join = [
         [InlineKeyboardButton("📢 Join Channel 1", url=f"https://t.me/{CHANNEL_1}")],
         [InlineKeyboardButton("📢 Join Channel 2", url=f"https://t.me/+{CHANNEL_2}")],
@@ -460,22 +460,23 @@ Hello! I'm an OSINT information bot.
     ]
     join_markup = InlineKeyboardMarkup(keyboard_join)
 
-    # FIXED: Simple caption without complex Markdown that causes parsing errors
-    caption = """⚠️ *Please Join Our Channels*
+    # FIXED: Simple text without Markdown formatting
+    caption = """Please Join Our Channels
 
 To use this bot, you need to join both of our channels:
 
 • Channel 1: @BTBB_discussion
 • Channel 2: Private Channel
 
-After joining, tap *Verify Joined Channels* below.
-"""
+After joining, tap Verify Joined Channels below."""
+
     try:
-        update.message.reply_photo(photo=LOGO_URL, caption=caption, parse_mode="Markdown", reply_markup=join_markup)
+        # FIXED: Remove parse_mode completely
+        update.message.reply_photo(photo=LOGO_URL, caption=caption, reply_markup=join_markup)
     except Exception as e:
         logger.error(f"Error sending photo: {e}")
-        # Fallback to text only
-        update.message.reply_text(caption, parse_mode="Markdown", reply_markup=join_markup)
+        # Fallback to text only - without Markdown
+        update.message.reply_text(caption, reply_markup=join_markup)
 
 def _send_welcome(update: Update, context: CallbackContext, use_reply=False):
     user_id = update.effective_user.id
