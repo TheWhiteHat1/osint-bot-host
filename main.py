@@ -177,6 +177,30 @@ def _safe_edit_or_reply(query, text, parse_mode="Markdown", reply_markup=None):
         except Exception as e2:
             logger.error(f"Fallback reply failed: {e2}")
 
+# ================== CREDIT CHECK FUNCTION ==================
+def check_and_deduct_credits(user_id, chat_type, update):
+    """
+    Check and deduct credits only in private chats.
+    Returns True if operation can proceed, False if not enough credits.
+    """
+    # No credit check in groups
+    if chat_type in ['group', 'supergroup']:
+        return True
+        
+    # Credit check only in private chats
+    balance = user_credits.get(user_id, 0)
+    if balance <= 0:
+        update.message.reply_text(
+            f"❌ Not enough credits! Your current balance is {balance}.\n"
+            f"💰 Buy credits from {ADMIN_USERNAME} or earn via /referral."
+        )
+        return False
+    
+    # Deduct credit only in private chats
+    user_credits[user_id] = user_credits.get(user_id, 0) - 1
+    save_user_data()
+    return True
+
 # ================== COMMAND HANDLERS ==================
 def help_command(update: Update, context: CallbackContext):
     help_text = """
@@ -200,6 +224,8 @@ def help_command(update: Update, context: CallbackContext):
 • 🇵🇰 Pakistan SIM Info
 
 *Credits System:*
+- Private chat: 1 credit per lookup
+- Groups: Free unlimited lookups
 - Start with 2 free credits
 - Earn 1 credit per referral
 - Buy more credits from admin
@@ -267,14 +293,14 @@ def credits_command(update: Update, context: CallbackContext):
 
 *Current Credits:* {balance}
 
+*Credit Usage:*
+• Private chat: 1 credit per lookup
+• Groups: Free unlimited lookups
+
 *Ways to Get Credits:*
 • 🎁 Start bonus: 2 credits
 • 🔗 Referral: +1 credit per referral  
 • 💰 Purchase from admin
-
-*Credit Usage:*
-• Each lookup costs 1 credit
-• Check balance before searching
 
 *Need more credits?*
 Contact {ADMIN_USERNAME}
@@ -285,8 +311,6 @@ Contact {ADMIN_USERNAME}
 # ================== QUICK COMMAND HANDLERS ==================
 def quick_number_lookup(update: Update, context: CallbackContext):
     chat_type = update.message.chat.type
-    in_group = chat_type in ['group', 'supergroup']
-    
     user_id = update.effective_user.id
     
     if user_id in banned_users:
@@ -303,26 +327,15 @@ def quick_number_lookup(update: Update, context: CallbackContext):
         update.message.reply_text("❌ Please enter a valid phone number (digits only)")
         return
         
-    # Groups में भी credits check करें
-    balance = user_credits.get(user_id, 0)
-    if balance <= 0:
-        update.message.reply_text(
-            f"❌ Not enough credits! Your current balance is {balance}.\n"
-            f"💰 Buy credits from {ADMIN_USERNAME} or earn via /referral."
-        )
+    # Check and deduct credits (only in private chats)
+    if not check_and_deduct_credits(user_id, chat_type, update):
         return
-    
-    # Groups में भी credit deduct करें
-    user_credits[user_id] = user_credits.get(user_id, 0) - 1
-    save_user_data()
 
     update.message.reply_text(f"⏳ Searching number {number}...")
-    number_lookup(update, context, number, in_group)
+    number_lookup(update, context, number, chat_type in ['group', 'supergroup'])
 
 def quick_pak_sim_lookup(update: Update, context: CallbackContext):
     chat_type = update.message.chat.type
-    in_group = chat_type in ['group', 'supergroup']
-    
     user_id = update.effective_user.id
     
     if user_id in banned_users:
@@ -339,21 +352,12 @@ def quick_pak_sim_lookup(update: Update, context: CallbackContext):
         update.message.reply_text("❌ Please enter a valid phone number (digits only)")
         return
         
-    # Groups में भी credits check करें
-    balance = user_credits.get(user_id, 0)
-    if balance <= 0:
-        update.message.reply_text(
-            f"❌ Not enough credits! Your current balance is {balance}.\n"
-            f"💰 Buy credits from {ADMIN_USERNAME} or earn via /referral."
-        )
+    # Check and deduct credits (only in private chats)
+    if not check_and_deduct_credits(user_id, chat_type, update):
         return
-    
-    # Groups में भी credit deduct करें
-    user_credits[user_id] = user_credits.get(user_id, 0) - 1
-    save_user_data()
 
     update.message.reply_text(f"⏳ Searching Pakistan SIM {number}...")
-    pak_sim_lookup(update, context, number, in_group)
+    pak_sim_lookup(update, context, number, chat_type in ['group', 'supergroup'])
 
 def quick_aadhaar_lookup(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
@@ -372,14 +376,19 @@ def quick_aadhaar_lookup(update: Update, context: CallbackContext):
         update.message.reply_text("❌ Please enter a valid 12-digit Aadhaar number")
         return
         
-    # Check credits
-    balance = user_credits.get(user_id, 0)
-    if balance <= 0:
-        update.message.reply_text(
-            f"❌ Not enough credits! Your current balance is {balance}.\n"
-            f"💰 Buy credits from {ADMIN_USERNAME} or earn via /referral."
-        )
-        return
+    # Check credits only in private chats
+    chat_type = update.message.chat.type
+    if chat_type == 'private':
+        balance = user_credits.get(user_id, 0)
+        if balance <= 0:
+            update.message.reply_text(
+                f"❌ Not enough credits! Your current balance is {balance}.\n"
+                f"💰 Buy credits from {ADMIN_USERNAME} or earn via /referral."
+            )
+            return
+        # Deduct credit only in private
+        user_credits[user_id] = user_credits.get(user_id, 0) - 1
+        save_user_data()
 
     update.message.reply_text("🏠 *Aadhaar Lookup*\n\n⏳ This feature is coming soon! Stay tuned for updates.")
 
@@ -422,21 +431,19 @@ def start(update: Update, context: CallbackContext):
 
 Hello! I'm an OSINT information bot.
 
-Your Credits: {balance}
+Your Credits: {balance} (for private use)
 
 Available Commands:
-/num <number> - Number lookup
-/paknum <number> - Pakistan SIM lookup  
+/num <number> - Number lookup (FREE in groups)
+/paknum <number> - Pakistan SIM lookup (FREE in groups)  
 /aadhaar <number> - Aadhaar lookup (Coming Soon)
 /profile - Check your profile
 /referral - Get referral link
 /credits - Check credits
 /help - Show help
 
-Credits System:
-- Start with 2 free credits
-- Earn 1 credit per referral
-- Buy more credits from admin
+*Groups: Free unlimited lookups*
+*Private: 1 credit per lookup*
 
 Support: {ADMIN_USERNAME}
         """
@@ -488,6 +495,7 @@ def _send_welcome(update: Update, context: CallbackContext, use_reply=False):
         "🔍 OSINT Info Bot — Get Number / Vehicle / SIM Info 📱\n\n"
         f"💰 Credits: {balance}\n"
         f"☎️ Support: {ADMIN_USERNAME}\n\n"
+        "*Usage:*\n• Private: 1 credit per lookup\n• Groups: Free unlimited\n\n"
         "⚠️ Use this service lawfully."
     )
 
@@ -570,12 +578,15 @@ def handle_callback(update: Update, context: CallbackContext):
 /paknum <number> - Quick Pakistan SIM search
 /aadhaar <number> - Aadhaar search (Coming Soon)
 
+*Credit System:*
+• Private chat: 1 credit per lookup
+• Groups: Free unlimited lookups
+
 *How to Use:*
 1. Select a lookup service
 2. Send the required data
 3. Get instant results!
 
-*Credits:* Each lookup costs 1 credit
 *Support:* {ADMIN_USERNAME}
             """.format(ADMIN_USERNAME=ADMIN_USERNAME)
             _safe_edit_or_reply(query, help_text)
@@ -637,6 +648,7 @@ def handle_text_message(update: Update, context: CallbackContext):
         return
         
     if lookup_type:
+        # Check credits only in private chats
         balance = user_credits.get(user_id, 0)
         if balance <= 0:
             update.message.reply_text(
@@ -645,7 +657,7 @@ def handle_text_message(update: Update, context: CallbackContext):
             )
             return
 
-        # Credit deduct करें
+        # Credit deduct करें only in private chats
         user_credits[user_id] = user_credits.get(user_id, 0) - 1
         save_user_data()
 
@@ -809,6 +821,8 @@ def format_pak_sim_response(info):
     return response_text
 
 def vehicle_lookup(update: Update, context: CallbackContext, rc: str):
+    # Note: vehicle_lookup is only called from private chat context
+    # So we deduct credits here
     user_id = update.effective_user.id
     user_credits[user_id] = user_credits.get(user_id, 0) - 1
     save_user_data()
@@ -1070,12 +1084,12 @@ def main():
     dp.add_handler(CommandHandler("profile", profile_command))
     dp.add_handler(CommandHandler("referral", referral_command))
     dp.add_handler(CommandHandler("credits", credits_command))
-    
+        
     # Add quick command handlers
     dp.add_handler(CommandHandler("num", quick_number_lookup))
     dp.add_handler(CommandHandler("paknum", quick_pak_sim_lookup))
     dp.add_handler(CommandHandler("aadhaar", quick_aadhaar_lookup))
-    
+        
     # Admin commands
     dp.add_handler(CommandHandler("addcredits", add_credits))
     dp.add_handler(CommandHandler("deductcredits", deduct_credits))
@@ -1085,7 +1099,7 @@ def main():
     dp.add_handler(CommandHandler("unban", unban_user))
     dp.add_handler(CommandHandler("broadcast", broadcast))
     dp.add_handler(CommandHandler("stats", stats))
-    
+        
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text_message))
     dp.add_handler(CallbackQueryHandler(handle_callback))
 
