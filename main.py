@@ -30,7 +30,7 @@ CHANNEL_1 = "BTBB_discussion"  # Public channel
 CHANNEL_2 = "jrsMh73PayMwNDY1"  # Private channel invite ID
 
 # APIs
-API_URL = os.getenv("API_URL") or "https://seller-ki-mkc.taitanx.workers.dev/?mobile="
+API_URL = os.getenv("API_URL") or "https://gourav-darkgp0-number-info.vercel.app/lookup?mobile="
 API_URL_VEHICLE = os.getenv("API_URL_VEHICLE") or "https://rc-info-ng.vercel.app/?rc="
 API_URL_PAK_SIM = os.getenv("API_URL_PAK_SIM") or "https://allnetworkdata.com/?number="
 
